@@ -46,6 +46,24 @@ pip install -e .
 
 ## Connect to Claude Desktop
 
+### Option 1 — Automatic (Recommended)
+
+Run this once after installing:
+
+```bash
+locallens-mcp --setup-claude
+```
+
+Then **restart Claude Desktop**. LocalLens tools will appear in the tool panel automatically.
+
+To check the status or disconnect later:
+```bash
+locallens-mcp --claude-status   # print connection state as JSON
+locallens-mcp --remove-claude   # remove LocalLens from Claude config
+```
+
+### Option 2 — Manual
+
 Add the following to your Claude Desktop config file:
 
 **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`  
@@ -55,7 +73,10 @@ Add the following to your Claude Desktop config file:
 {
   "mcpServers": {
     "locallens": {
-      "command": "locallens-mcp"
+      "command": "locallens-mcp",
+      "env": {
+        "LOCALLENS_STORE_URL": "https://locallens.lemonsqueezy.com"
+      }
     }
   }
 }

@@ -1,6 +1,13 @@
+import json
 import sys
 import argparse
 from mcp.server.fastmcp import FastMCP
+
+from .claude_connector import (
+    install_claude_connector,
+    uninstall_claude_connector,
+    get_connection_status,
+)
 
 try:
     import setproctitle
@@ -87,19 +94,72 @@ After tool calls complete, the response may include a "next_actions" array — p
     return mcp
 
 def main():
-    parser = argparse.ArgumentParser(description="LocalLens MCP Server")
-    # For standalone LLMs that connect via stdio
-    parser.add_argument("--stdio", action="store_true", help="Run via stdio (for direct LLM connections)")
+    parser = argparse.ArgumentParser(
+        description="LocalLens MCP Server",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Claude Desktop integration commands:\n"
+            "  --setup-claude    Inject LocalLens into Claude Desktop config and exit\n"
+            "  --remove-claude   Remove LocalLens from Claude Desktop config and exit\n"
+            "  --claude-status   Print connection status as JSON and exit\n"
+        ),
+    )
+    # MCP server transport (default: stdio)
+    parser.add_argument(
+        "--stdio",
+        action="store_true",
+        help="Run via stdio (for direct LLM connections, this is the default)",
+    )
+
+    # ── Claude Desktop integration subcommands ──────────────────────────────
+    claude_group = parser.add_mutually_exclusive_group()
+    claude_group.add_argument(
+        "--setup-claude",
+        action="store_true",
+        help="Inject LocalLens MCP server into Claude Desktop config and exit",
+    )
+    claude_group.add_argument(
+        "--remove-claude",
+        action="store_true",
+        help="Remove LocalLens MCP server from Claude Desktop config and exit",
+    )
+    claude_group.add_argument(
+        "--claude-status",
+        action="store_true",
+        help="Print Claude Desktop connection status as JSON and exit",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force re-injection even if LocalLens is already connected (use with --setup-claude)",
+    )
+
     args, _unknown = parser.parse_known_args()
 
+    # ── Handle Claude Desktop subcommands ──────────────────────────────────
+    # These are fire-and-exit commands — they never start the MCP server.
+    # The LocalLens desktop app calls these via subprocess and reads stdout.
+    if args.setup_claude:
+        result = install_claude_connector(force=args.force)
+        print(json.dumps(result, indent=2))
+        _success = result["status"] in {"installed", "updated", "already_connected"}
+        sys.exit(0 if _success else 1)
+
+    if args.remove_claude:
+        result = uninstall_claude_connector()
+        print(json.dumps(result, indent=2))
+        _success = result["status"] in {"removed", "not_connected"}
+        sys.exit(0 if _success else 1)
+
+    if args.claude_status:
+        result = get_connection_status()
+        print(json.dumps(result, indent=2))
+        sys.exit(0)
+
+    # ── Default: start the MCP server ──────────────────────────────────────
     app = create_mcp_app()
-    
-    if args.stdio:
-        # Default behavior: run on stdio, typical for MCP
-        app.run()
-    else:
-        # By default, FastMCP runs with stdio if run() is called directly without specific server transports.
-        app.run()
+    app.run()
+
 
 if __name__ == "__main__":
     main()

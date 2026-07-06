@@ -93,6 +93,50 @@ ollama serve                   # Start if not running (usually auto-starts)
 
 ---
 
+## Scenario E: Automatic Setup — Recommended for Most Users
+
+**Prerequisites**: LocalLens app installed, `locallens-mcp` installed (from pip or venv).
+
+If you installed the MCP agent via `pip install locallens-mcp` or inside a venv, the
+fastest way to connect to Claude Desktop is the built-in connector command.
+No JSON editing, no path hunting:
+
+```bash
+# Activate your venv first if using one
+source venv/bin/activate
+
+# Auto-inject LocalLens into Claude Desktop config
+locallens-mcp --setup-claude
+```
+
+Expected output:
+```json
+{
+  "status": "installed",
+  "config_path": "/Users/you/Library/Application Support/Claude/claude_desktop_config.json",
+  "command": "/Users/you/.../venv/bin/locallens-mcp",
+  "message": "LocalLens MCP server installed successfully. Please restart Claude Desktop to apply the changes.",
+  "claude_needs_restart": true
+}
+```
+
+Then **restart Claude Desktop** — LocalLens tools will appear in the tool panel.
+
+### Other connector commands
+
+| Command | What it does |
+|---------|-------------|
+| `locallens-mcp --setup-claude` | Inject LocalLens into Claude Desktop config |
+| `locallens-mcp --setup-claude --force` | Force re-inject even if already connected (useful after upgrading) |
+| `locallens-mcp --remove-claude` | Remove LocalLens from Claude Desktop config |
+| `locallens-mcp --claude-status` | Print current connection status as JSON |
+
+> The LocalLens desktop app's **Settings → Integrations → Connect to Claude** button
+> calls `locallens-mcp --setup-claude` internally via subprocess and reads the JSON result
+> to update the UI (connected/disconnected/error).
+
+---
+
 ## Scenario A: I want to use Claude Desktop with LocalLens tools
 
 **You need running**: LocalLens app (Process 1), Claude Desktop (manages Process 2 automatically)
