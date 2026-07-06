@@ -1,0 +1,25 @@
+{
+  "mcp": {
+    "latest": "1.0.0",
+    "min_supported": "1.0.0",
+    "release_notes_url": "https://locallens.app/changelog",
+    "changelog": [
+      {
+        "version": "1.0.0",
+        "date": "July 2026",
+        "highlights": [
+          "Official MCP launch — connect LocalLens to Claude, Cursor, and more",
+          "Smart sorting by date, location, and people",
+          "Face recognition with enrollment and search",
+          "Duplicate detection and safe cleanup",
+          "Scheduled auto-organize and real-time folder watching",
+          "100% local — zero data leaves your machine"
+        ]
+      }
+    ]
+  },
+  "app": {
+    "latest": "1.0.0",
+    "download_url": "https://locallens.app/download"
+  }
+}

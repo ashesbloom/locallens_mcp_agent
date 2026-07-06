@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "locallens-mcp"
+version = "1.0.0"
+description = "MCP server for LocalLens — AI-powered local photo organization. 100% private, runs on your machine."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Business Source License 1.1"}
+authors = [
+    {name = "LocalLens"},
+]
+keywords = ["mcp", "photos", "ai", "local", "privacy", "organization", "claude"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Graphics",
+]
+dependencies = [
+    "mcp>=1.0.0",
+    "httpx>=0.24.0",
+    "pydantic>=2.0.0",
+    "packaging>=23.0",
+]
+
+[project.urls]
+Homepage = "https://locallens.app"
+Repository = "https://github.com/locallens/locallens-mcp"
+"Bug Tracker" = "https://github.com/locallens/locallens-mcp/issues"
+
+[project.optional-dependencies]
+chat = [
+    "gradio>=4.0.0,<5.0",
+    "ollama>=0.2.0",
+]
+
+[project.scripts]
+locallens-mcp = "mcp_server.main:main"
+locallens-chat = "chat_ui:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,11 @@
+{
+  "_comment": "Add this to your Claude Desktop config file. See INSTRUCTIONS.md for the full path on your OS.",
+  "mcpServers": {
+    "locallens": {
+      "command": "locallens-mcp",
+      "env": {
+        "LOCALLENS_STORE_URL": "https://locallens.lemonsqueezy.com"
+      }
+    }
+  }
+}
