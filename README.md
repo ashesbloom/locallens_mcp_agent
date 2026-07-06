@@ -23,12 +23,32 @@ LocalLens MCP is the AI bridge for [LocalLens](https://locallens.app) — a priv
 ## Prerequisites
 
 1. **LocalLens app** must be installed and running on your machine → [Download at locallens.app](https://locallens.app)
-2. **Python 3.10+**
-3. **Claude Desktop** (or any MCP-compatible client)
+2. **Claude Desktop** (or any MCP-compatible client)
 
 ---
 
 ## Installation
+
+### Option 1 — Download Executable (Recommended)
+
+1. Download the latest binary zip for your system from the [Releases](https://github.com/ashesbloom/locallens_mcp_agent/releases) page:
+   - macOS: `locallens-mcp-vX.Y.Z-macos-arm64.zip` (Apple Silicon) or `-macos-x86_64.zip` (Intel)
+   - Windows: `locallens-mcp-vX.Y.Z-windows-x86_64.zip`
+   - Linux: `locallens-mcp-vX.Y.Z-linux-x86_64.tar.gz`
+2. Extract the archive.
+3. Open your terminal, navigate to the extracted file, and run the connector setup command:
+   ```bash
+   ./locallens-mcp --setup-claude
+   ```
+   *(On Windows: run `.\locallens-mcp.exe --setup-claude`)*
+
+> [!NOTE]
+> On macOS, because the binary is unsigned, the OS might warn that the developer cannot be verified. You can allow it in **System Settings > Privacy & Security**, or run:
+> `xattr -dr com.apple.quarantine locallens-mcp`
+
+### Option 2 — Install via pip (For Python Developers)
+
+Requires Python 3.10+:
 
 ```bash
 pip install locallens-mcp
@@ -37,8 +57,8 @@ pip install locallens-mcp
 Or install from source:
 
 ```bash
-git clone https://github.com/locallens/locallens-mcp
-cd locallens-mcp
+git clone https://github.com/ashesbloom/locallens_mcp_agent.git
+cd locallens_mcp_agent
 pip install -e .
 ```
 

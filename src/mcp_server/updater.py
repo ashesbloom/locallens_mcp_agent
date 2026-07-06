@@ -33,6 +33,7 @@ Version file schema expected at https://locallens.app/version.json:
 }
 """
 
+import sys
 import json
 import os
 import time
@@ -194,7 +195,11 @@ def check_for_updates(force: bool = False) -> Optional[Dict[str, Any]]:
             "release_notes_url": mcp_info.get(
                 "release_notes_url", "https://locallens.app/changelog"
             ),
-            "upgrade_command": "pip install --upgrade locallens-mcp",
+            "upgrade_command": (
+                "Download the latest executable from https://github.com/ashesbloom/locallens_mcp_agent/releases"
+                if getattr(sys, "frozen", False)
+                else "pip install --upgrade locallens-mcp"
+            ),
         }
 
     except (InvalidVersion, Exception) as e:

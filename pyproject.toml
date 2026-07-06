@@ -42,9 +42,14 @@ chat = [
     "gradio>=4.0.0,<5.0",
     "ollama>=0.2.0",
 ]
+dev = [
+    "pyinstaller>=6.0.0",
+    "pytest>=7.0.0",
+]
 
 [project.scripts]
 locallens-mcp = "mcp_server.main:main"
+locallens-chat = "chat_ui:main"
 locallens-chat = "chat_ui:main"
 
 [tool.setuptools.packages.find]

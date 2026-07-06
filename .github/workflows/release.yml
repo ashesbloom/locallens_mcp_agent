@@ -1,0 +1,78 @@
+name: Release Binaries
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Binary (${{ matrix.os }} - ${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            arch: arm64
+            artifact_name: locallens-mcp
+            asset_suffix: macos-arm64
+            archive_cmd: zip -j locallens-mcp-${{ github.ref_name }}-macos-arm64.zip dist/locallens-mcp
+            archive_file: locallens-mcp-${{ github.ref_name }}-macos-arm64.zip
+          - os: macos-13
+            arch: x86_64
+            artifact_name: locallens-mcp
+            asset_suffix: macos-x86_64
+            archive_cmd: zip -j locallens-mcp-${{ github.ref_name }}-macos-x86_64.zip dist/locallens-mcp
+            archive_file: locallens-mcp-${{ github.ref_name }}-macos-x86_64.zip
+          - os: windows-latest
+            arch: x86_64
+            artifact_name: locallens-mcp.exe
+            asset_suffix: windows-x86_64
+            archive_cmd: Compress-Archive -Path dist/locallens-mcp.exe -DestinationPath locallens-mcp-${{ github.ref_name }}-windows-x86_64.zip
+            archive_file: locallens-mcp-${{ github.ref_name }}-windows-x86_64.zip
+          - os: ubuntu-22.04
+            arch: x86_64
+            artifact_name: locallens-mcp
+            asset_suffix: linux-x86_64
+            archive_cmd: tar -czf locallens-mcp-${{ github.ref_name }}-linux-x86_64.tar.gz -C dist locallens-mcp
+            archive_file: locallens-mcp-${{ github.ref_name }}-linux-x86_64.tar.gz
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-size: '3.11'
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .[dev]
+
+      - name: Build binary with PyInstaller
+        run: |
+          pyinstaller locallens-mcp.spec
+
+      - name: Create archive
+        shell: pwsh
+        run: |
+          if ("${{ matrix.os }}" -eq "windows-latest") {
+            ${{ matrix.archive_cmd }}
+          } else {
+            bash -c "${{ matrix.archive_cmd }}"
+          }
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.archive_file }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
