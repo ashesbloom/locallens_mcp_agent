@@ -48,7 +48,6 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-size: '3.11'
           python-version: '3.11'
           cache: 'pip'
 
@@ -61,14 +60,14 @@ jobs:
         run: |
           pyinstaller locallens-mcp.spec
 
-      - name: Create archive
+      - name: Create archive (Unix)
+        if: runner.os != 'Windows'
+        run: ${{ matrix.archive_cmd }}
+
+      - name: Create archive (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
-        run: |
-          if ("${{ matrix.os }}" -eq "windows-latest") {
-            ${{ matrix.archive_cmd }}
-          } else {
-            bash -c "${{ matrix.archive_cmd }}"
-          }
+        run: ${{ matrix.archive_cmd }}
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
