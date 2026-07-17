@@ -125,6 +125,22 @@ def _fetch_version_manifest() -> Optional[Dict[str, Any]]:
         return None
 
 
+def _get_manifest(force: bool = False) -> Optional[Dict[str, Any]]:
+    """
+    Return the version manifest, using the disk cache when possible.
+
+    Shared by both check_for_updates() and check_app_update() so that
+    calling them back-to-back only hits the network once (second call
+    reads the cache written by the first).
+    """
+    manifest = None if force else _read_cache()
+    if manifest is None:
+        manifest = _fetch_version_manifest()
+        if manifest:
+            _write_cache(manifest)
+    return manifest
+
+
 def check_for_updates(force: bool = False) -> Optional[Dict[str, Any]]:
     """
     Check if a newer MCP version is available.
@@ -146,13 +162,7 @@ def check_for_updates(force: bool = False) -> Optional[Dict[str, Any]]:
         - Any error occurs (always safe to call)
     """
     try:
-        # Try cache first (unless forced)
-        manifest = None if force else _read_cache()
-
-        if manifest is None:
-            manifest = _fetch_version_manifest()
-            if manifest:
-                _write_cache(manifest)
+        manifest = _get_manifest(force=force)
 
         if not manifest:
             return None
@@ -204,4 +214,59 @@ def check_for_updates(force: bool = False) -> Optional[Dict[str, Any]]:
 
     except (InvalidVersion, Exception) as e:
         logger.debug(f"[updater] check_for_updates failed silently: {e}")
+        return None
+
+
+def check_app_update(installed_version: Optional[str], force: bool = False) -> Optional[Dict[str, Any]]:
+    """
+    Check if a newer LocalLens desktop/backend app version is available.
+
+    Unlike check_for_updates() (which compares against this package's own
+    hardcoded MCP_VERSION), the app version has to be supplied by the caller
+    — read live from the running backend's GET /api/stats (`app_version`
+    field), since the tray/MCP server has no other way to know it.
+
+    Shares the same manifest cache/fetch as check_for_updates() (same
+    version.json, different top-level key), so calling both back-to-back
+    only hits the network once.
+
+    Returns a dict if an update is available:
+        {
+            "update_available": True,
+            "current_version": "2.3.0",
+            "latest_version": "2.4.0",
+            "download_url": "https://locallens.app/download",
+        }
+
+    Returns None if installed_version is unknown (backend not running),
+    already on the latest version, or any error occurs.
+    """
+    if not installed_version:
+        return None
+    try:
+        manifest = _get_manifest(force=force)
+
+        if not manifest:
+            return None
+
+        app_info = manifest.get("app", {})
+        latest_str = app_info.get("latest", "")
+        if not latest_str:
+            return None
+
+        current = Version(installed_version)
+        latest = Version(latest_str)
+
+        if current >= latest:
+            return None  # already up to date
+
+        return {
+            "update_available": True,
+            "current_version": installed_version,
+            "latest_version": latest_str,
+            "download_url": app_info.get("download_url", "https://locallens.app/download"),
+        }
+
+    except (InvalidVersion, Exception) as e:
+        logger.debug(f"[updater] check_app_update failed silently: {e}")
         return None

@@ -115,27 +115,94 @@ def detect_install_method() -> str:
     Detect how locallens-mcp was installed on this machine.
 
     Returns one of:
-      "bundled"    — Running as a PyInstaller/Briefcase frozen app bundle.
-      "venv"       — Running inside a Python virtual environment.
-      "uvx"        — Not in a venv but `uvx` is available on PATH.
-      "global_pip" — Fallback: assume a global pip install.
+      "py2app_bundle" — Running as a py2app macOS .app bundle (sys.frozen == "macosx_app").
+      "bundled"       — Running as a PyInstaller/Briefcase frozen app (sys.frozen == True,
+                        sys._MEIPASS present).
+      "venv"          — Running inside a Python virtual environment.
+      "uvx"           — Not in a venv but `uvx` is available on PATH.
+      "global_pip"    — Fallback: assume a global pip install.
 
     The result drives which command path we inject into Claude's config.
     """
-    # 1. PyInstaller / Briefcase frozen bundle
-    if getattr(sys, "frozen", False):
+    frozen = getattr(sys, "frozen", False)
+
+    # py2app sets sys.frozen = "macosx_app" (a truthy string, not True/False)
+    if frozen == "macosx_app":
+        return "py2app_bundle"
+
+    # PyInstaller / Briefcase: sys.frozen is True and sys._MEIPASS is set
+    if frozen and hasattr(sys, "_MEIPASS"):
         return "bundled"
 
-    # 2. Active Python virtual environment
+    # Legacy / other frozen runtimes (e.g. cx_Freeze)
+    if frozen:
+        return "bundled"
+
+    # Active Python virtual environment
     if sys.prefix != sys.base_prefix:
         return "venv"
 
-    # 3. uvx (uv's tool runner) is on PATH — preferred for non-venv users
+    # uvx (uv's tool runner) is on PATH — preferred for non-venv users
     if shutil.which("uvx") is not None:
         return "uvx"
 
-    # 4. Fallback — assume global pip install
+    # Fallback — assume global pip install
     return "global_pip"
+
+
+def _get_resource_path() -> Path:
+    """
+    Return the Resources directory of the current py2app bundle.
+
+    py2app sets the RESOURCEPATH environment variable to the absolute path
+    of Contents/Resources/ at startup.  As a fallback we derive it from
+    sys.executable (Contents/MacOS/python → Contents/Resources/).
+    """
+    rp = os.environ.get("RESOURCEPATH")
+    if rp:
+        return Path(rp)
+    # Fallback: sys.executable is in Contents/MacOS/; go up two levels
+    return Path(sys.executable).parent.parent / "Resources"
+
+
+def _get_locallens_config_dir() -> Path:
+    """
+    Return the LocalLens configuration directory.
+
+    Platform paths:
+      macOS/Linux: ~/.config/LocalLens/
+      Windows:     %APPDATA%/LocalLens/
+    """
+    if sys.platform == "win32":
+        return Path(os.getenv("APPDATA", os.path.expanduser("~"))) / "LocalLens"
+    return Path.home() / ".config" / "LocalLens"
+
+
+def _resolve_binary_from_install_dir(binary_name: str) -> Optional[Path]:
+    """
+    Try to locate the locallens-mcp binary via install_dir.txt.
+
+    install_dir.txt is written by the LocalLens desktop app and contains the
+    absolute path to the backend install directory.  The MCP binary lives in
+    that directory's venv bin/Scripts folder.
+
+    Returns the Path to the binary if found and it exists, else None.
+    """
+    install_txt = _get_locallens_config_dir() / "install_dir.txt"
+    if not install_txt.exists():
+        return None
+    try:
+        install_dir = Path(install_txt.read_text().strip())
+        candidate = (
+            install_dir / "venv" / "Scripts" / binary_name
+            if sys.platform == "win32"
+            else install_dir / "venv" / "bin" / binary_name
+        )
+        if candidate.exists():
+            return candidate
+    except Exception:
+        pass
+    return None
 
 
 def get_mcp_command_config() -> Dict[str, Any]:
@@ -146,25 +213,91 @@ def get_mcp_command_config() -> Dict[str, Any]:
     Returns a dict like:
         {
           "command": "/path/to/locallens-mcp",  # or "uvx" / "locallens-mcp"
-          "args": [],                             # or ["locallens-mcp"] for uvx
+          "args": [],                             # or ["-m", "mcp_server.main"] for bundle
           "env": { "LOCALLENS_STORE_URL": "..." }
         }
     """
     method = detect_install_method()
     env_block = {"LOCALLENS_STORE_URL": _STORE_URL}
 
+    _log.debug(f"detect_install_method() → {method!r}")
+    _log.debug(f"sys.executable = {sys.executable}")
+    _log.debug(f"sys.prefix     = {sys.prefix}")
+
+    # ── py2app bundle (macOS DMG) ──────────────────────────────────────────────
+    if method == "py2app_bundle":
+        # The tray app is self-contained. py2app stores packages in two places:
+        #   1. python311.zip        — pure-Python stdlib + third-party packages
+        #   2. lib/pythonX.Y/       — packages needing data files (mcp_server, pydantic…)
+        #   3. lib/pythonX.Y/lib-dynload/  — C extensions (pydantic_core._pydantic_core.so)
+        #
+        # When Claude invokes the bundled Python directly (not through the .app
+        # launcher), __boot__.py is NOT executed, so sys.path does NOT get set up
+        # automatically. We must supply the complete PYTHONPATH ourselves.
+        resource_path = _get_resource_path()
+        py_ver = f"python{sys.version_info.major}.{sys.version_info.minor}"
+        py_ver_nodot = f"python{sys.version_info.major}{sys.version_info.minor}"
+        lib_dir       = resource_path / "lib" / py_ver           # mcp_server, pydantic, …
+        dynload_dir   = lib_dir / "lib-dynload"                  # pydantic_core.so, etc.
+        zip_path      = resource_path / "lib" / f"{py_ver_nodot}.zip"  # mcp, httpx, anyio…
+        bundled_python = str(Path(sys.executable))
+
+        _log.debug(f"py2app bundle: resource_path={resource_path}")
+        _log.debug(f"py2app bundle: lib_dir      ={lib_dir} (exists={lib_dir.exists()})")
+        _log.debug(f"py2app bundle: dynload_dir  ={dynload_dir} (exists={dynload_dir.exists()})")
+        _log.debug(f"py2app bundle: zip_path     ={zip_path} (exists={zip_path.exists()})")
+        _log.debug(f"py2app bundle: bundled_python={bundled_python}")
+
+
+        # Build PYTHONPATH — highest priority first (dynload must be before zip
+        # so that C extensions shadow any stub in the zip).
+        python_path_parts = []
+        if dynload_dir.exists():
+            python_path_parts.append(str(dynload_dir))
+        if lib_dir.exists():
+            python_path_parts.append(str(lib_dir))
+        if zip_path.exists():
+            python_path_parts.append(str(zip_path))
+        # Always include Resources root itself
+        python_path_parts.append(str(resource_path))
+        python_path = os.pathsep.join(python_path_parts)
+
+        return {
+            "command": bundled_python,
+            "args": ["-m", "mcp_server.main"],
+            "env": {
+                **env_block,
+                "PYTHONPATH": python_path,
+                "RESOURCEPATH": str(resource_path),
+            },
+        }
+
+    # ── PyInstaller / Briefcase bundle ─────────────────────────────────────────
     if method == "bundled":
-        # Frozen app: the MCP binary lives alongside the app executable.
-        # sys._MEIPASS is the PyInstaller temp dir; fall back to sys.executable dir.
+        # The MCP binary should live alongside the app executable.
         app_dir = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
         binary_name = "locallens-mcp.exe" if sys.platform == "win32" else "locallens-mcp"
         mcp_binary = app_dir / binary_name
-        return {
-            "command": str(mcp_binary),
-            "args": [],
-            "env": env_block,
-        }
 
+        if not mcp_binary.exists():
+            # Fallback: check install_dir.txt → LocalLens backend venv
+            from_install_dir = _resolve_binary_from_install_dir(binary_name)
+            if from_install_dir:
+                mcp_binary = from_install_dir
+
+        if mcp_binary.exists():
+            _log.debug(f"bundled: mcp_binary={mcp_binary}")
+            return {
+                "command": str(mcp_binary),
+                "args": [],
+                "env": env_block,
+            }
+
+        # Binary not found in bundle or install_dir.txt — fall through to
+        # PATH / uvx / global_pip below so we don't inject a dead path.
+        _log.warning(f"bundled: expected binary not found at {mcp_binary}; trying PATH")
+
+    # ── venv ───────────────────────────────────────────────────────────────────
     if method == "venv":
         # Resolve the locallens-mcp script inside the active venv's bin/Scripts dir.
         scripts_dir = Path(sys.prefix) / (
@@ -173,26 +306,78 @@ def get_mcp_command_config() -> Dict[str, Any]:
         binary_name = "locallens-mcp.exe" if sys.platform == "win32" else "locallens-mcp"
         mcp_binary = scripts_dir / binary_name
         if mcp_binary.exists():
+            _log.debug(f"venv: using {mcp_binary}")
             return {
                 "command": str(mcp_binary),
                 "args": [],
                 "env": env_block,
             }
-        # venv detected but binary not found — fall through to global_pip
 
-    if method == "uvx":
+        # venv detected but binary not in THIS venv — check install_dir.txt
+        # (covers the case where the tray app runs from a different venv
+        # than the one locallens-mcp is installed in)
+        from_install_dir = _resolve_binary_from_install_dir(binary_name)
+        if from_install_dir:
+            _log.debug(f"venv fallback (install_dir.txt): {from_install_dir}")
+            return {
+                "command": str(from_install_dir),
+                "args": [],
+                "env": env_block,
+            }
+
+        # Fallback: resolve from this connector module's own repo venv.
+        # This covers the case where the tray runs from the LocalLens backend
+        # venv but the MCP agent repo (containing this file) has its own venv
+        # with locallens-mcp installed.
+        try:
+            repo_root = Path(__file__).resolve().parent.parent.parent  # src/mcp_server/ → src/ → repo root
+            if sys.platform == "win32":
+                repo_binary = repo_root / "venv" / "Scripts" / binary_name
+            else:
+                repo_binary = repo_root / "venv" / "bin" / binary_name
+            if repo_binary.exists():
+                _log.debug(f"venv fallback (repo venv): {repo_binary}")
+                return {
+                    "command": str(repo_binary),
+                    "args": [],
+                    "env": env_block,
+                }
+        except Exception:
+            pass
+
+        # venv binary not found anywhere — fall through to PATH / uvx /
+        # global_pip below (not a dead end like the old code).
+        _log.debug("venv: binary not found in any venv; trying PATH / uvx")
+
+    # ── Shared fallback chain (also reached by bundled/venv when binary ─────
+    #    was not found in its expected location)                               ─
+
+    # Try PATH first — works for any install method
+    resolved = shutil.which("locallens-mcp")
+    if resolved:
+        _log.debug(f"fallback (PATH): {resolved}")
+        return {
+            "command": resolved,
+            "args": [],
+            "env": env_block,
+        }
+
+    # Try uvx if available
+    if shutil.which("uvx") is not None:
+        _log.debug("fallback: using uvx")
         return {
             "command": "uvx",
             "args": ["locallens-mcp"],
             "env": env_block,
         }
 
-    # global_pip (or venv binary not found)
+    # Last resort — bare command name; will fail at runtime if not on PATH
     return {
         "command": "locallens-mcp",
         "args": [],
         "env": env_block,
     }
+
 
 
 # ── Binary Verification ────────────────────────────────────────────────────────

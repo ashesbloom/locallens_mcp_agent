@@ -3,7 +3,7 @@
 block_cipher = None
 
 a = Analysis(
-    ['src/mcp_server/main.py'],
+    ['locallens_mcp_entrypoint.py'],
     pathex=['src'],
     binaries=[],
     datas=[],

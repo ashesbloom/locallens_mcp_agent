@@ -4,9 +4,11 @@ __pycache__/
 *.pyo
 *.pyd
 *.egg-info/
+*.egg
+.eggs/
 dist/
 build/
-*.egg
+*.dmg
 
 # Virtual environments
 venv/
@@ -24,9 +26,10 @@ mcp_onboarded.json
 port.txt
 local_api_token.txt
 
-# IDE
+# IDE / AI agent local settings
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 
@@ -34,12 +37,13 @@ local_api_token.txt
 .DS_Store
 **/.DS_Store
 
-# Test artifacts
+# Test / debugging artifacts
 .pytest_cache/
 .coverage
 htmlcov/
+test_env*.py
 
-#artifacts
+# Dev-only documentation (not shipped)
 .-.-/
 for dev/
 for LLM's/

@@ -201,6 +201,9 @@ class TestGetMcpCommandConfig:
     def test_uvx_config(self):
         with (
             patch("mcp_server.claude_connector.detect_install_method", return_value="uvx"),
+            # Mock shutil.which so the shared PATH-fallback doesn't find the
+            # live venv binary and short-circuit before we reach the uvx branch.
+            patch("mcp_server.claude_connector.shutil.which", side_effect=lambda cmd: "uvx" if cmd == "uvx" else None),
         ):
             cfg = get_mcp_command_config()
         assert cfg["command"] == "uvx"
@@ -209,7 +212,11 @@ class TestGetMcpCommandConfig:
         assert "LOCALLENS_STORE_URL" in cfg["env"]
 
     def test_global_pip_config(self):
-        with patch("mcp_server.claude_connector.detect_install_method", return_value="global_pip"):
+        with (
+            patch("mcp_server.claude_connector.detect_install_method", return_value="global_pip"),
+            # Ensure shutil.which returns None so the last-resort bare command is used.
+            patch("mcp_server.claude_connector.shutil.which", return_value=None),
+        ):
             cfg = get_mcp_command_config()
         assert cfg["command"] == "locallens-mcp"
         assert cfg["args"] == []
@@ -566,7 +573,100 @@ class TestBackupPruning:
         assert len(backups) <= _MAX_BACKUPS
 
 
+# ── bundled install method (py2app & PyInstaller) ─────────────────────────────
+
+
+class TestBundledInstallMethod:
+    """
+    Tests for the frozen-binary code paths in get_mcp_command_config().
+
+    These exercise the paths that are NEVER reachable in a normal pip/venv run,
+    so they must be verified via mocking.  They correspond directly to the
+    'MCP server not attaching to Claude when launched from a bundle' bug:
+    the connector must inject a complete, valid command + env into Claude's
+    config even when running inside a py2app .app or a PyInstaller EXE.
+    """
+
+    def test_py2app_bundle_pythonpath_constructed(self, tmp_path):
+        """
+        When sys.frozen == 'macosx_app', get_mcp_command_config() must:
+          - return command = the bundled python executable
+          - return args = ['-m', 'mcp_server.main']
+          - set PYTHONPATH to include lib/<pyver>/, lib/<pyver>/lib-dynload/, and <pyver>.zip
+          - set RESOURCEPATH env var
+        """
+        import sys as _sys
+
+        # Build a fake py2app Resources tree so the path-existence checks pass
+        resources = tmp_path / "Contents" / "Resources"
+        py_ver = f"python{_sys.version_info.major}.{_sys.version_info.minor}"
+        py_ver_nodot = f"python{_sys.version_info.major}{_sys.version_info.minor}"
+        lib_dir = resources / "lib" / py_ver
+        dynload_dir = lib_dir / "lib-dynload"
+        zip_path = resources / "lib" / f"{py_ver_nodot}.zip"
+
+        lib_dir.mkdir(parents=True)
+        dynload_dir.mkdir(parents=True)
+        zip_path.write_bytes(b"PK")  # dummy zip
+
+        fake_python = tmp_path / "Contents" / "MacOS" / "python"
+        fake_python.parent.mkdir(parents=True)
+        fake_python.write_text("#!/bin/sh\necho fake\n")
+
+        with (
+            patch.object(_sys, "frozen", "macosx_app", create=True),
+            patch.object(_sys, "executable", str(fake_python)),
+            patch.dict(os.environ, {"RESOURCEPATH": str(resources)}, clear=False),
+        ):
+            method = detect_install_method()
+            cfg = get_mcp_command_config()
+
+        assert method == "py2app_bundle", f"Expected py2app_bundle, got {method!r}"
+
+        # Command must be the bundled python, args must be [-m, mcp_server.main]
+        assert cfg["command"] == str(fake_python)
+        assert cfg["args"] == ["-m", "mcp_server.main"]
+
+        # RESOURCEPATH must be forwarded into the env block
+        assert "RESOURCEPATH" in cfg["env"]
+
+        # PYTHONPATH must contain the lib dir and the zip
+        python_path = cfg["env"].get("PYTHONPATH", "")
+        path_parts = python_path.split(os.pathsep)
+        assert str(lib_dir) in path_parts, "lib dir missing from PYTHONPATH"
+        assert str(zip_path) in path_parts, "zip missing from PYTHONPATH"
+        assert str(dynload_dir) in path_parts, "lib-dynload missing from PYTHONPATH"
+
+    def test_pyinstaller_bundle_uses_meipass_binary(self, tmp_path):
+        """
+        When sys.frozen == True and sys._MEIPASS is set, get_mcp_command_config()
+        must resolve the MCP binary from sys._MEIPASS (the extraction temp dir
+        where PyInstaller unpacks the bundle at runtime).
+        """
+        import sys as _sys
+
+        fake_meipass = tmp_path / "meipass"
+        fake_meipass.mkdir()
+
+        binary_name = "locallens-mcp.exe" if _sys.platform == "win32" else "locallens-mcp"
+        fake_binary = fake_meipass / binary_name
+        fake_binary.write_text("#!/bin/sh\necho fake\n")
+        fake_binary.chmod(0o755)
+
+        with (
+            patch.object(_sys, "frozen", True, create=True),
+            patch.object(_sys, "_MEIPASS", str(fake_meipass), create=True),
+        ):
+            method = detect_install_method()
+            cfg = get_mcp_command_config()
+
+        assert method == "bundled", f"Expected bundled, got {method!r}"
+        assert cfg["command"] == str(fake_binary)
+        assert cfg["args"] == []
+
+
 # Allow running directly for quick feedback
 if __name__ == "__main__":
     import subprocess
     subprocess.run([sys.executable, "-m", "pytest", __file__, "-v"], check=False)
+

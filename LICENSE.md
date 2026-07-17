@@ -1,21 +1,21 @@
 # Business Source License 1.1
 
-Licensor:             [Your Name / Company]
+Licensor:             LocalLens AI Inc.
 Licensed Work:        LocalLens MCP Agent v1.0
-                      The Licensed Work is (c) 2026 [Your Name / Company]
+                      The Licensed Work is (c) 2026 LocalLens AI Inc.
 
 Additional Use Grant: You may use the Licensed Work for non-production purposes,
                       including personal use, testing, development, and education,
                       without a commercial license.
 
                       Production use of Pro-tier features requires a valid license key
-                      obtained from https://your-store.lemonsqueezy.com.
+                      obtained from "Lemon Squeezy URL here "
 
-Change Date:          2029-06-01
+Change Date:          2026-07-18
 
 Change License:       Apache License, Version 2.0
 
-License text copyright (c) 2024 MariaDB plc, All Rights Reserved.
+License text copyright (c) 2026 LocalLens AI Inc., All Rights Reserved.
 "Business Source License" is a trademark of MariaDB plc.
 
 ## Terms
@@ -61,7 +61,7 @@ License", as long as you comply with the Covenants of Licensor below.
 ## Covenants of Licensor
 
 In consideration of the right to use this License's text and the "Business Source
-License" name and trademark, Licensor covenants to MariaDB, and to all other
+License" name and trademark, Licensor covenants to LocalLens AI Inc., and to all other
 recipients of the licensed work to be provided by Licensor:
 
 To specify as the Change License the GPL Version 2.0 or any later version, or a
@@ -80,14 +80,3 @@ this License in any other way.
 The Business Source License (this document, or the "License") is not an Open
 Source license. However, the Licensed Work will eventually be made available
 under an Open Source License, as stated in this License.
-
-For more information on the use of the Business Source License for MariaDB
-products, please visit the MariaDB Business Source License FAQ:
-https://mariadb.com/bsl-faq-mariadb/
-
-For more information on the use of the Business Source License generally,
-please visit the Adopting and Developing Business Source License FAQ:
-https://mariadb.com/bsl-faq-adopting/
-
-Projects using BSL:
-https://mariadb.com/projects-using-bsl-11/

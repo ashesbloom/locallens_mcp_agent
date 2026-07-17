@@ -47,7 +47,6 @@ LocalLens MCP is the AI bridge for [LocalLens](https://locallens.app) — a priv
 > `xattr -dr com.apple.quarantine locallens-mcp`
 
 ### Option 2 — Install via pip (For Python Developers)
-
 Requires Python 3.10+:
 
 ```bash
