@@ -411,7 +411,7 @@ def start_find_group(
     poll_interval_s: float = 1.0,
     timeout_s: int = 900,
 ) -> Dict[str, Any]:
-    """⚡ PRO — Find and group photos matching specific criteria into a named subfolder."""
+    """⚡ Find and group photos matching specific criteria into a named subfolder."""
     source_folder = _resolve_path(source_folder, "source_folder")
     destination_folder = _resolve_path(destination_folder, "destination_folder")
     payload = {
@@ -826,12 +826,12 @@ TOOL_SPECS: List[Dict[str, Any]] = [
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
-    # ── Pro: Find & Group ──
+    # ── Find & Group ──
     {
         "type": "function",
         "function": {
             "name": "start_find_group",
-            "description": "PRO: Find photos matching date/location/people filters and copy to a named subfolder.",
+            "description": "Find photos matching date/location/people filters and copy to a named subfolder.",
             "parameters": {
                 "type": "object",
                 "properties": {

@@ -178,8 +178,8 @@ def register_pro_tools(mcp: FastMCP):
     @mcp.tool()
     async def activate_pro_license(license_key: str) -> Dict[str, Any]:
         """
-        Activate a Pro license to unlock premium features like Find & Group,
-        face enrollment, duplicate detection, scheduled auto-organize, and more.
+        Activate a Pro license to unlock premium features like duplicate detection,
+        face enrollment, scheduled auto-organize, and more.
 
         Purchase a license at https://locallens.app
         Requires a one-time internet connection. After activation,

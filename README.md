@@ -178,7 +178,6 @@ Require an active Pro license (`activate_pro_license`):
 | Job progress & abort | ✅ | ✅ |
 | Path memory (remember / forget) | ✅ | ✅ |
 | Face recognition & enrollment | — | ✅ |
-| Find & Group (filter by person + place + date) | — | ✅ |
 | Duplicate detection & cleanup | — | ✅ |
 | Export reports | — | ✅ |
 | Scheduled auto-organize (every N hours) | — | ✅ |
