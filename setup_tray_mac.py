@@ -29,8 +29,7 @@ OPTIONS = {
         'typing_extensions', 'typing_inspection',
         'jsonschema', 'jsonschema_specifications', 'referencing', 'rpds',
         'attr', 'attrs', 'packaging',
-        'dotenv', 'pygments', 'rich', 'brotli',
-        'multipart', 'python_multipart',
+        'dotenv',
     ],
 }
 

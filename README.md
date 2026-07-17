@@ -142,6 +142,7 @@ Available to everyone, no license required:
 | `get_path_presets` | Retrieve saved folder path presets |
 | `analyse_folder` | Scan a folder: subfolder list, photo counts, locations, people |
 | `start_sorting` | Sort photos by Date, Location, or People |
+| `start_find_group` | Filter photos by person, location, and date — copy to a new folder |
 | `abort_job` | Cancel a running sort or find job |
 | `open_folder` | Open a folder in the system file browser |
 | `remember_paths` | Save a folder path as a named preset for reuse |
@@ -156,7 +157,6 @@ Require an active Pro license (`activate_pro_license`):
 
 | Tool | What it does |
 |---|---|
-| `start_find_group` | Filter photos by person, location, and date — copy to a new folder |
 | `add_face_enroll` | Enroll one or more people for face recognition |
 | `find_duplicates` | Detect duplicate photos in a folder |
 | `delete_duplicates` | Safely remove duplicates (always dry-run first) |
@@ -174,6 +174,7 @@ Require an active Pro license (`activate_pro_license`):
 |---|---|---|
 | Folder analysis | ✅ | ✅ |
 | Sort by date / location / people | ✅ | ✅ |
+| Find & Group (filter by person + place + date) | ✅ | ✅ |
 | Job progress & abort | ✅ | ✅ |
 | Path memory (remember / forget) | ✅ | ✅ |
 | Face recognition & enrollment | — | ✅ |

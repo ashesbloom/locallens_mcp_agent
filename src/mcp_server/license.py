@@ -11,10 +11,13 @@ Design Principles:
 
 Revenue Model:
   - Free tier:  Core tools (check_app_status, get_stats, get_job_progress,
-                get_path_presets, get_enrolled_faces, get_metadata_overview,
-                start_sorting, abort_job)
-  - Pro tier:   Unlocks start_find_group, add_face_enroll, find_duplicates,
-                export_report, schedule_auto_organize, smart_album_suggestions
+                locallens_help, get_path_presets, get_enrolled_faces,
+                analyse_folder, start_sorting, start_find_group,
+                abort_job, open_folder, remember_paths, forget_paths)
+  - Pro tier:   Unlocks add_face_enroll, find_duplicates, delete_duplicates,
+                export_report, schedule_auto_organize, create_active_folder,
+                list_schedules, manage_schedule, open_scheduler_dashboard,
+                smart_album_suggestions
   - Cloud LLM:  Users choosing Groq/Gemini cloud mode may incur usage costs
                 after their free API tier is exhausted (handled by the LLM
                 connector, not this module).

@@ -6,12 +6,15 @@ Each tool is decorated with @require_pro, which checks the local license cache
 before execution. If not activated, the LLM receives a friendly upgrade prompt.
 
 Current Pro Tools:
-  - start_find_group      (moved here — Pro only)
   - add_face_enroll       (enroll a new person for face recognition)
   - find_duplicates       (detect duplicate photos in a folder)
+  - delete_duplicates     (safely remove duplicates, always dry-run first)
   - export_report         (generate a summary report of a folder's contents)
+  - schedule_auto_organize / create_active_folder (scheduler tools)
+  - smart_album_suggestions (AI-powered album grouping)
   - activate_pro_license  (license activation tool — free, always available)
   - get_license_status    (check current license state — free, always available)
+  - revoke_pro_license    (deactivate license — free, always available)
 """
 
 import os

@@ -268,7 +268,6 @@ def register_actions(mcp: FastMCP):
             return _handle_error(e)
 
     @mcp.tool()
-    @require_pro
     async def start_find_group(
         source_folder: str,
         destination_folder: str,

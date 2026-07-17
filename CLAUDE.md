@@ -148,7 +148,7 @@ locallens_tray_entrypoint.py   # PyInstaller entrypoint for tray app
 ## Tool Inventory (MCP)
 
 ### Free
-`check_app_status` · `get_stats` · `get_job_progress` · `locallens_help` · `get_enrolled_faces` · `get_path_presets` · `analyse_folder` · `start_sorting` · `abort_job` · `open_folder` · `remember_paths` · `forget_paths` · `activate_pro_license` · `get_license_status` · `revoke_pro_license`
+`check_app_status` · `get_stats` · `get_job_progress` · `locallens_help` · `get_enrolled_faces` · `get_path_presets` · `analyse_folder` · `start_sorting` · `start_find_group` · `abort_job` · `open_folder` · `remember_paths` · `forget_paths` · `activate_pro_license` · `get_license_status` · `revoke_pro_license`
 
 ### Pro (gated by `@require_pro`)
-`start_find_group` · `add_face_enroll` · `find_duplicates` · `delete_duplicates` · `export_report` · `create_active_folder` · `schedule_auto_organize` · `list_schedules` · `manage_schedule` · `open_scheduler_dashboard` · `smart_album_suggestions`
+`add_face_enroll` · `find_duplicates` · `delete_duplicates` · `export_report` · `create_active_folder` · `schedule_auto_organize` · `list_schedules` · `manage_schedule` · `open_scheduler_dashboard` · `smart_album_suggestions`
