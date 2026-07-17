@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "locallens-mcp"
-version = "1.0.1"
+version = "1.0.2"
 description = "MCP server for LocalLens — AI-powered local photo organization. 100% private, runs on your machine."
 readme = "README.md"
 requires-python = ">=3.10"
