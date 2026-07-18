@@ -21,6 +21,27 @@ LocalLens MCP is the AI bridge for [LocalLens](https://locallens.app) — a priv
 
 ---
 
+### Quick Install ⇣
+
+**macOS (Homebrew) — Recommended**
+```bash
+brew install ashesbloom/locallens/locallens-agent
+```
+*Homebrew handles Gatekeeper automatically — no extra steps needed!*
+
+**macOS (Manual DMG)**
+1. Download the `.dmg` from Releases
+2. Drag `LocalLens Agent.app` to Applications
+3. **Fix Gatekeeper (required for unsigned apps):**
+   - The DMG includes a `Fix LocalLens Agent.command` file. Double-click it.
+   - If macOS blocks double-click, run in terminal: `bash ~/Downloads/Fix\ LocalLens\ Agent.command`
+   - Or run manually in terminal:
+     ```bash
+     xattr -cr "/Applications/LocalLens Agent.app" && codesign --force --deep --sign - "/Applications/LocalLens Agent.app"
+     ```
+
+---
+
 ## Prerequisites
 
 1. **LocalLens app** must be installed and running → [Download at locallens.app](https://locallens.app)
