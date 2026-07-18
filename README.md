@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="icons/LLAgent_logo_red_readme.png" width="150" alt="LocalLens Agent Logo">
+</p>
+
 # LocalLens MCP Server
 
 > **Your Photos. Your Machine. Your Rules.**
