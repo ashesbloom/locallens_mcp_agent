@@ -272,31 +272,31 @@ jobs:
           # Bootstrap the cask file if it does not yet exist in the tap repo
           if [ ! -f "$CASK" ]; then
             mkdir -p "$(dirname "$CASK")"
-            cat > "$CASK" << 'CASK_EOF'
-cask "locallens-agent" do
-  version "PLACEHOLDER_VERSION"
-
-  on_arm do
-    url "https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v#{version}/locallens-agent-v#{version}-macos-arm64.dmg"
-    sha256 "PLACEHOLDER_ARM64_SHA"
-  end
-
-  on_intel do
-    url "https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v#{version}/locallens-agent-v#{version}-macos-x86_64.dmg"
-    sha256 "PLACEHOLDER_X86_SHA"
-  end
-
-  name "LocalLens Agent"
-  desc "System tray agent for LocalLens privacy-first photo organizer"
-  homepage "https://locallens.app"
-
-  app "LocalLens Agent.app"
-
-  zap trash: [
-    "~/.config/LocalLens",
-  ]
-end
-CASK_EOF
+            {
+              printf 'cask "locallens-agent" do\n'
+              printf '  version "PLACEHOLDER_VERSION"\n'
+              printf '\n'
+              printf '  on_arm do\n'
+              printf '    url "https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v#{version}/locallens-agent-v#{version}-macos-arm64.dmg"\n'
+              printf '    sha256 "PLACEHOLDER_ARM64_SHA"\n'
+              printf '  end\n'
+              printf '\n'
+              printf '  on_intel do\n'
+              printf '    url "https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v#{version}/locallens-agent-v#{version}-macos-x86_64.dmg"\n'
+              printf '    sha256 "PLACEHOLDER_X86_SHA"\n'
+              printf '  end\n'
+              printf '\n'
+              printf '  name "LocalLens Agent"\n'
+              printf '  desc "System tray agent for LocalLens privacy-first photo organizer"\n'
+              printf '  homepage "https://locallens.app"\n'
+              printf '\n'
+              printf '  app "LocalLens Agent.app"\n'
+              printf '\n'
+              printf '  zap trash: [\n'
+              printf '    "~/.config/LocalLens",\n'
+              printf '  ]\n'
+              printf 'end\n'
+            } > "$CASK"
             echo "Bootstrapped new cask file from template"
           fi
 
