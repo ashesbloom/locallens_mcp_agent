@@ -1,7 +1,8 @@
 """
 LocalLens MCP — Update Checker
 ================================
-Checks https://locallens.app/version.json for a newer MCP version.
+Checks the canonical version manifest for a newer MCP version.
+Currently hosted at raw.githubusercontent.com; will move to locallens.app once the website launches.
 
 Design principles:
   - Silent on failure (network down, timeout, bad JSON) — returns None, never raises
@@ -9,7 +10,7 @@ Design principles:
   - Zero user data sent — only the MCP version number is compared locally
   - Works fully offline once cached; gracefully degrades with no cache
 
-Version file schema expected at https://locallens.app/version.json:
+Version file schema (hosted at raw.githubusercontent.com/ashesbloom/locallens_mcp_agent/main/version.json):
 {
   "mcp": {
     "latest": "1.1.0",
@@ -54,10 +55,12 @@ MCP_VERSION = "1.0.4"
 # How often to check for updates (hours). Users never get hammered.
 TTL_HOURS = 24
 
-# Where the canonical version manifest lives
+# Where the canonical version manifest lives.
+# Served from raw.githubusercontent.com until locallens.app is live.
+# Override with the LOCALLENS_VERSION_URL env var at any time.
 VERSION_URL = os.getenv(
     "LOCALLENS_VERSION_URL",
-    "https://locallens.app/version.json"
+    "https://raw.githubusercontent.com/ashesbloom/locallens_mcp_agent/main/version.json"
 )
 
 # Local cache file

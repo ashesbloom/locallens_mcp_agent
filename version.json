@@ -1,9 +1,29 @@
 {
   "mcp": {
-    "latest": "1.0.0",
+    "latest": "1.0.13",
     "min_supported": "1.0.0",
-    "release_notes_url": "https://locallens.app/changelog",
+    "release_notes_url": "https://github.com/ashesbloom/locallens_mcp_agent/releases/latest",
     "changelog": [
+      {
+        "version": "1.0.13",
+        "date": "July 2026",
+        "highlights": [
+          "First public release of LocalLens MCP Agent",
+          "Native macOS menu bar tray app — install via Homebrew",
+          "16 free tools for photo organization out of the box",
+          "10 Pro tools: face enrollment, duplicates, smart albums, scheduling",
+          "Official LL Black branding applied across all platforms"
+        ]
+      },
+      {
+        "version": "1.0.12",
+        "date": "July 2026",
+        "highlights": [
+          "Official LL Black app icon applied to macOS DMG and Windows EXE",
+          "Red LLAgent logo added to project documentation",
+          "All icon assets committed and tracked in repository"
+        ]
+      },
       {
         "version": "1.0.0",
         "date": "July 2026",
