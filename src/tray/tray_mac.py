@@ -8,6 +8,7 @@ from .actions import (
     claude_setup, claude_status, claude_remove,
     get_claude_connection_state, maybe_show_welcome, show_help_tips,
     check_updates_now, open_url, copy_to_clipboard,
+    get_current_app_info, install_mcp_update,
     CLAUDE_CUSTOM_INSTRUCTIONS, CLAUDE_INSTRUCTIONS_HOWTO,
 )
 
@@ -31,6 +32,8 @@ _cached_update_info: dict = {"mcp": None, "app": None}
 # Dedup key set ("mcp:1.2.0", "app:2.4.0") so an hourly recheck doesn't
 # re-notify about a version we've already told the user about this session.
 _notified_update_versions: set = set()
+# Current version, license tier and LocalLens app version for the info labels.
+_cached_app_info: dict = {"mcp_version": "…", "license_tier": "Free", "license_activated": False, "app_version": None}
 
 def _is_pid_alive(pid: int) -> bool:
     """Check if a specific PID is still a running process."""
@@ -99,11 +102,16 @@ def _queue_update_notifications(update_info: dict):
 
 
 def _update_check_loop():
-    global _cached_update_info
+    global _cached_update_info, _cached_app_info
     while not _stop_polling:
         info = check_updates_now()
         _queue_update_notifications(info)
         _cached_update_info = info
+        # Refresh version/license/app-version info alongside the update check.
+        try:
+            _cached_app_info = get_current_app_info()
+        except Exception:
+            pass
         time.sleep(_UPDATE_CHECK_INTERVAL_SECONDS)
 
 
@@ -155,13 +163,35 @@ class LocalLensAgentApp(rumps.App):
             self._ll_title(STATUS_OFF, "Stopped"), callback=self.on_ll_status
         )
 
-        # ── Updates ──────────────────────────────────────────────────────
+        # ── Updates ──────────────────────────────────────────────────────────────────
         self.btn_updates = rumps.MenuItem(self._updates_title(STATUS_ON, "Up to Date"))
+
+        # Info labels — always visible, updated by the polling loop every second.
+        # No callback makes them non-interactive (display only).
+        self.btn_info_mcp = rumps.MenuItem("  ℹ  MCP Agent v…")
+        self.btn_info_plan = rumps.MenuItem("  ℹ  Plan: Free")
+        self.btn_info_app = rumps.MenuItem("  ℹ  LocalLens App: Not Running")
+
+        # Action items
         self.btn_updates_check = rumps.MenuItem("Check for Updates", callback=self.on_check_updates)
         self.btn_updates_details = rumps.MenuItem("What's New / Download…", callback=self.on_update_details)
+
+        # Install / status button — title changes dynamically:
+        #   ✓  MCP Agent is Up to Date       (no update)
+        #   ⬇  Install Update v1.0.X…        (update available)
+        self.btn_install_update = rumps.MenuItem(
+            "✓  MCP Agent is Up to Date", callback=self.on_install_update
+        )
+
         self.btn_updates.update([
+            self.btn_info_mcp,
+            self.btn_info_plan,
+            self.btn_info_app,
+            None,
             self.btn_updates_check,
             self.btn_updates_details,
+            None,
+            self.btn_install_update,
         ])
 
         # ── Help & Quit ─────────────────────────────────────────────────
@@ -254,15 +284,39 @@ class LocalLensAgentApp(rumps.App):
             self.btn_ll_status.title = self._ll_title(STATUS_ON, "Running")
 
     def _update_updates_button(self):
-        """Reflect the last update check (refreshed hourly by _update_check_loop, or on-demand)."""
+        """Refresh all info labels and the install/status button from cached state."""
         mcp_u = _cached_update_info.get("mcp")
         app_u = _cached_update_info.get("app")
+        info = _cached_app_info
+
+        # ── Info labels ──────────────────────────────────────────────────────
+        mcp_ver = info.get("mcp_version", "…")
+        self.btn_info_mcp.title = f"  ℹ  MCP Agent v{mcp_ver}"
+
+        tier = info.get("license_tier", "Free")
+        self.btn_info_plan.title = f"  ℹ  Plan: {tier}"
+
+        app_ver = info.get("app_version")
+        if app_ver:
+            self.btn_info_app.title = f"  ℹ  LocalLens App v{app_ver}"
+        elif _cached_ll_running:
+            self.btn_info_app.title = "  ℹ  LocalLens App: Running"
+        else:
+            self.btn_info_app.title = "  ℹ  LocalLens App: Not Running"
+
+        # ── Install / up-to-date button ───────────────────────────────────────
+        if mcp_u and mcp_u.get("update_available"):
+            self.btn_install_update.title = f"⬇  Install Update v{mcp_u['latest_version']}…"
+        else:
+            self.btn_install_update.title = "✓  MCP Agent is Up to Date"
+
+        # ── Top-level submenu title ───────────────────────────────────────────
         if not mcp_u and not app_u:
             self.btn_updates.title = self._updates_title(STATUS_ON, "Up to Date")
             return
         parts = []
         if mcp_u:
-            parts.append(f"Connector v{mcp_u['latest_version']}")
+            parts.append(f"MCP v{mcp_u['latest_version']}")
         if app_u:
             parts.append(f"App v{app_u['latest_version']}")
         self.btn_updates.title = self._updates_title(STATUS_STARTING, "Available — " + ", ".join(parts))
@@ -272,9 +326,13 @@ class LocalLensAgentApp(rumps.App):
         self.btn_updates.title = self._updates_title(STATUS_STARTING, "Checking…")
 
         def _check_bg():
-            global _cached_update_info
+            global _cached_update_info, _cached_app_info
             info = check_updates_now(force=True)
             _cached_update_info = info
+            try:
+                _cached_app_info = get_current_app_info()
+            except Exception:
+                pass
             mcp_u, app_u = info.get("mcp"), info.get("app")
             if mcp_u or app_u:
                 lines = []
@@ -290,12 +348,15 @@ class LocalLensAgentApp(rumps.App):
                     )
                 _pending_alerts.append((
                     "Update Available",
-                    "\n".join(lines) + "\n\nOpen \"What's New / Download…\" for details."
+                    "\n".join(lines) + "\n\nUse \"Install Update…\" in the Updates menu to upgrade."
                 ))
             else:
+                ai = _cached_app_info
+                mcp_ver = ai.get("mcp_version", "—")
+                tier = ai.get("license_tier", "Free")
                 _pending_alerts.append((
-                    "You're Up to Date",
-                    "LocalLens and the MCP connector are both on the latest version."
+                    "You're Up to Date  ✓",
+                    f"MCP Agent v{mcp_ver} · {tier} Plan\nEverything is on the latest version."
                 ))
 
         threading.Thread(target=_check_bg, daemon=True).start()
@@ -303,28 +364,93 @@ class LocalLensAgentApp(rumps.App):
     def on_update_details(self, sender):
         mcp_u = _cached_update_info.get("mcp")
         app_u = _cached_update_info.get("app")
+        info = _cached_app_info
+
         if not mcp_u and not app_u:
-            rumps.alert("You're Up to Date", "LocalLens and the MCP connector are both on the latest version.")
+            # No update — show current status instead of a plain "up to date" alert
+            mcp_ver = info.get("mcp_version", "unknown")
+            tier = info.get("license_tier", "Free")
+            app_ver = info.get("app_version")
+            app_line = f"LocalLens App v{app_ver}" if app_ver else "LocalLens App: not running"
+            rumps.alert(
+                "You're Up to Date  ✓",
+                f"MCP Agent v{mcp_ver} · {tier} Plan\n{app_line}\n\n"
+                "Everything is on the latest version."
+            )
             return
 
         lines = []
         url = None
         if mcp_u:
-            lines.append(f"LocalLens MCP Connector — v{mcp_u['latest_version']} (you have {mcp_u['current_version']})")
+            lines.append(f"MCP Agent — v{mcp_u['latest_version']} available  (you have v{mcp_u['current_version']})")
             for h in mcp_u.get("highlights", []):
                 lines.append(f"   • {h}")
             url = mcp_u.get("release_notes_url") or url
         if app_u:
             if lines:
                 lines.append("")
-            lines.append(f"LocalLens App — v{app_u['latest_version']} (you have {app_u['current_version']})")
-            # Prefer the app's own download link if both are present — it's
-            # the more common case a user needs a direct action for.
+            lines.append(f"LocalLens App — v{app_u['latest_version']} available  (you have v{app_u['current_version']})")
             url = app_u.get("download_url") or url
 
-        res = rumps.alert("Update Available", "\n".join(lines), ok="Open Download Page", cancel="Close")
-        if res == 1 and url:
-            open_url(url)
+        res = rumps.alert(
+            "Update Available",
+            "\n".join(lines) + "\n\nClick \"Install Update\" to download the latest version.",
+            ok="Install Update",
+            cancel="Close",
+        )
+        if res == 1:
+            self.on_install_update(sender)
+
+    def on_install_update(self, sender):
+        """One-click update: pip-upgrade for source installs, browser for frozen builds."""
+        mcp_u = _cached_update_info.get("mcp")
+        info = _cached_app_info
+        mcp_ver = info.get("mcp_version", "unknown")
+
+        if not mcp_u or not mcp_u.get("update_available"):
+            rumps.alert(
+                "Already Up to Date  ✓",
+                f"MCP Agent v{mcp_ver} is the latest version. Nothing to install."
+            )
+            return
+
+        latest = mcp_u["latest_version"]
+        highlights = mcp_u.get("highlights", [])
+        hl_text = ("\n" + "\n".join(f"   • {h}" for h in highlights[:5])) if highlights else ""
+
+        res = rumps.alert(
+            f"Install MCP Update v{latest}",
+            f"Current version: v{mcp_ver}\n"
+            f"New version:     v{latest}"
+            f"{hl_text}\n\n"
+            "The download page will open in your browser.\n"
+            "Replace the existing app with the new one after downloading.",
+            ok="Download & Install",
+            cancel="Not Now",
+        )
+        if res != 1:
+            return
+
+        result = install_mcp_update(
+            latest_version=latest,
+            release_notes_url=mcp_u.get("release_notes_url", ""),
+            upgrade_command=mcp_u.get("upgrade_command", ""),
+        )
+
+        if result.get("method") == "pip":
+            if result.get("success"):
+                rumps.alert(
+                    "Update Installed  ✓",
+                    f"LocalLens MCP has been updated to v{latest}.\n"
+                    "Restart LocalLens Agent for the changes to take effect."
+                )
+            else:
+                rumps.alert(
+                    "Update Failed",
+                    f"Could not install v{latest} via pip:\n\n{result.get('error', 'Unknown error')}\n\n"
+                    "Try updating manually from the releases page.",
+                )
+        # method == "browser": releases page already opened — no extra alert needed
 
     def on_open_claude(self, sender):
         open_claude()

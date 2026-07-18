@@ -78,6 +78,86 @@ def check_updates_now(force: bool = False) -> dict:
     return {"mcp": mcp_update, "app": app_update}
 
 
+def get_current_app_info() -> dict:
+    """
+    Return version, license tier and LocalLens backend app version for
+    display in the Updates submenu info labels.
+
+    All calls are cheap (local file reads + one localhost HTTP request).
+    Safe to call from the background poll thread. Never raises.
+    """
+    mcp_version = "—"
+    license_tier = "Free"
+    license_activated = False
+    app_version = None
+
+    if _updater_available:
+        try:
+            from mcp_server.updater import MCP_VERSION
+            mcp_version = MCP_VERSION
+        except Exception:
+            pass
+
+    try:
+        from mcp_server.license import get_license_info
+        li = get_license_info()
+        license_activated = bool(li.get("activated", False))
+        license_tier = li.get("tier", "free").capitalize()
+    except Exception:
+        pass
+
+    try:
+        from .status import get_installed_app_version
+        app_version = get_installed_app_version()
+    except Exception:
+        pass
+
+    return {
+        "mcp_version": mcp_version,
+        "license_tier": license_tier,
+        "license_activated": license_activated,
+        "app_version": app_version,
+    }
+
+
+def install_mcp_update(latest_version: str, release_notes_url: str, upgrade_command: str) -> dict:
+    """
+    Attempt to install an MCP update.
+
+    For frozen builds (py2app / PyInstaller): opens the releases page in the
+    browser — the user downloads the new DMG/zip and replaces the app.
+    Silent in-place replacement requires a signed updater (future: Sparkle).
+
+    For pip installs (developer / source): runs `pip install --upgrade
+    locallens-mcp` in a subprocess and returns the result.
+
+    Returns {"method": "browser"|"pip", "success": bool, ...}. Never raises.
+    """
+    import sys as _sys
+    url = release_notes_url or "https://github.com/ashesbloom/locallens_mcp_agent/releases/latest"
+
+    if getattr(_sys, "frozen", False):
+        # Running as a bundled .app — open the releases page, user installs manually
+        open_url(url)
+        return {"method": "browser", "success": True, "url": url}
+
+    # pip / source install — upgrade in-place
+    try:
+        result = subprocess.run(
+            [_sys.executable, "-m", "pip", "install", "--upgrade", "locallens-mcp"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if result.returncode == 0:
+            return {"method": "pip", "success": True, "output": result.stdout}
+        else:
+            return {"method": "pip", "success": False, "error": result.stderr or result.stdout}
+    except Exception as exc:
+        return {"method": "pip", "success": False, "error": str(exc)}
+
+
+
 def open_url(url: str):
     """Open an arbitrary URL in the default browser (release notes, downloads)."""
     webbrowser.open(url)
