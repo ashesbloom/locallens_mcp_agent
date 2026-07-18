@@ -1,6 +1,6 @@
 {
   "mcp": {
-    "latest": "1.0.13",
+    "latest": "1.0.14",
     "min_supported": "1.0.0",
     "release_notes_url": "https://github.com/ashesbloom/locallens_mcp_agent/releases/latest",
     "changelog": [
