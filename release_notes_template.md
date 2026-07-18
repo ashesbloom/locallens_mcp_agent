@@ -1,5 +1,13 @@
-# LocalLens MCP Agent v1.0.12
+# Release Process Rules
 
+Before pushing a new tag or triggering a new action release build, you MUST:
+
+1. Always create a release note for both the GitHub release page and the "What's New" in the GUI of the application.
+2. Ensure the GitHub release note follows the official template below, with the correct version numbers updated everywhere (including download URLs).
+
+## GitHub Release Note Template
+
+```markdown
 **The first public release of LocalLens MCP Agent — your AI-powered bridge to privacy-first photo organization.**
 
 LocalLens MCP Agent connects Claude Desktop (or any MCP-compatible AI assistant) to your local [LocalLens](https://locallens.app) photo organizer. Everything runs on your machine. Zero data leaves your device.
@@ -19,10 +27,10 @@ LocalLens MCP Agent connects Claude Desktop (or any MCP-compatible AI assistant)
 
 | Platform | File | Type |
 |----------|------|------|
-| macOS (Apple Silicon) | [locallens-agent-v1.0.12-macos-arm64.dmg](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v1.0.12/locallens-agent-v1.0.12-macos-arm64.dmg) | Menu Bar App |
-| macOS (Apple Silicon) | [locallens-mcp-v1.0.12-macos-arm64.zip](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v1.0.12/locallens-mcp-v1.0.12-macos-arm64.zip) | MCP Binary |
-| Windows (x64) | [locallens-mcp-v1.0.12-windows-x86_64.zip](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v1.0.12/locallens-mcp-v1.0.12-windows-x86_64.zip) | MCP Binary |
-| Linux (x64) | [locallens-mcp-v1.0.12-linux-x86_64.tar.gz](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v1.0.12/locallens-mcp-v1.0.12-linux-x86_64.tar.gz) | MCP Binary |
+| macOS (Apple Silicon) | [locallens-agent-macos-arm64.dmg](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/{VERSION}/locallens-agent-{VERSION}-macos-arm64.dmg) | Menu Bar App |
+| macOS (Apple Silicon) | [locallens-mcp-macos-arm64.zip](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/{VERSION}/locallens-mcp-{VERSION}-macos-arm64.zip) | MCP Binary |
+| Windows (x64) | [locallens-mcp-windows-x86_64.zip](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/{VERSION}/locallens-mcp-{VERSION}-windows-x86_64.zip) | MCP Binary |
+| Linux (x64) | [locallens-mcp-linux-x86_64.tar.gz](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/{VERSION}/locallens-mcp-{VERSION}-linux-x86_64.tar.gz) | MCP Binary |
 
 ---
 
@@ -30,37 +38,43 @@ LocalLens MCP Agent connects Claude Desktop (or any MCP-compatible AI assistant)
 
 ### macOS — Homebrew (Recommended)
 
-```bash
+\`\`\`bash
 brew install ashesbloom/locallens/locallens-agent
-```
+\`\`\`
 
 The menu bar app will be available in your Applications folder.
 
 ### macOS — DMG
 
-1. Download `locallens-agent-v1.0.12-macos-arm64.dmg`
+**Fix Gatekeeper (required for unsigned apps):**
+  - Run  in terminal:
+     \`\`\`bash
+     xattr -cr "/Applications/LocalLens Agent.app" && codesign --force --deep --sign - "/Applications/LocalLens Agent.app"
+     \`\`\`
+
+1. Download `locallens-agent-{VERSION}-macos-arm64.dmg`
 2. Open the DMG and drag **LocalLens Agent** to Applications
 3. Run the included **Fix LocalLens Agent.command** to clear macOS Gatekeeper
 4. Launch from Applications — look for the `LL` icon in your menu bar
 
 ### macOS / Linux — MCP Binary
 
-```bash
+\`\`\`bash
 # Extract and set up
-tar -xzf locallens-mcp-v1.0.12-macos-arm64.tar.gz   # or .zip on macOS
+tar -xzf locallens-mcp-{VERSION}-macos-arm64.tar.gz   # or .zip on macOS
 ./locallens-mcp --setup-claude
 
 # Restart Claude Desktop to activate
-```
+\`\`\`
 
 ### Windows — MCP Binary
 
-```powershell
+\`\`\`powershell
 # Extract the zip, then run:
 .\locallens-mcp.exe --setup-claude
 
 # Restart Claude Desktop to activate
-```
+\`\`\`
 
 ---
 
@@ -131,3 +145,4 @@ You're ready to organize your photos with AI.
 ---
 
 *Built with privacy in mind. Your photos stay on your machine.*
+```
