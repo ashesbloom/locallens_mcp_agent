@@ -17,18 +17,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
+          # macOS arm64 (Apple Silicon). Rosetta 2 runs this natively on Intel Macs too.
+          # macos-13 (Intel) is excluded — GitHub has deprecated that runner pool
+          # and jobs queue indefinitely waiting for an unavailable runner.
+          - os: macos-latest
             arch: arm64
             artifact_name: locallens-mcp
             asset_suffix: macos-arm64
             archive_cmd: zip -j locallens-mcp-${{ github.ref_name }}-macos-arm64.zip dist/locallens-mcp
             archive_file: locallens-mcp-${{ github.ref_name }}-macos-arm64.zip
-          - os: macos-13
-            arch: x86_64
-            artifact_name: locallens-mcp
-            asset_suffix: macos-x86_64
-            archive_cmd: zip -j locallens-mcp-${{ github.ref_name }}-macos-x86_64.zip dist/locallens-mcp
-            archive_file: locallens-mcp-${{ github.ref_name }}-macos-x86_64.zip
           - os: windows-latest
             arch: x86_64
             artifact_name: locallens-mcp.exe
@@ -78,19 +75,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-tray-mac:
-    name: Build Tray App (macOS - ${{ matrix.arch }})
-    runs-on: ${{ matrix.os }}
+    name: Build Tray App (macOS - arm64)
+    runs-on: macos-latest
     timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-14
-            arch: arm64
-            dmg_file: locallens-agent-${{ github.ref_name }}-macos-arm64.dmg
-          - os: macos-13
-            arch: x86_64
-            dmg_file: locallens-agent-${{ github.ref_name }}-macos-x86_64.dmg
+    # Single arm64 build. Apple Silicon is 90%+ of active Macs.
+    # Rosetta 2 runs this binary transparently on Intel hardware.
+    # macos-13 (Intel runner) is excluded — GitHub deprecated that pool;
+    # jobs queue indefinitely waiting for an unavailable runner.
 
     steps:
       - name: Checkout code
@@ -141,12 +132,12 @@ jobs:
             -volname "LocalLens Agent" \
             -srcfolder dmg_staging \
             -ov -format UDZO \
-            "${{ matrix.dmg_file }}"
+            "locallens-agent-${{ github.ref_name }}-macos-arm64.dmg"
 
       - name: Upload tray DMG
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ matrix.dmg_file }}
+          files: locallens-agent-${{ github.ref_name }}-macos-arm64.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -162,23 +153,16 @@ jobs:
   #   APPLE_TEAM_ID              — 10-char Team ID from developer.apple.com
   #
   # notarize-mac:
-  #   name: Notarize & Staple DMG (macOS)
+  #   name: Notarize & Staple DMG (macOS - arm64)
   #   runs-on: macos-latest
   #   timeout-minutes: 30
   #   needs: build-tray-mac
-  #   strategy:
-  #     matrix:
-  #       include:
-  #         - arch: arm64
-  #           dmg_file: locallens-agent-${{ github.ref_name }}-macos-arm64.dmg
-  #         - arch: x86_64
-  #           dmg_file: locallens-agent-${{ github.ref_name }}-macos-x86_64.dmg
   #   steps:
-  #     - name: Download DMG
+  #     - name: Download arm64 DMG
   #       uses: robinraju/release-downloader@v1.11
   #       with:
   #         tag: ${{ github.ref_name }}
-  #         fileName: ${{ matrix.dmg_file }}
+  #         fileName: locallens-agent-${{ github.ref_name }}-macos-arm64.dmg
   #         out-file-path: dmg_downloads
   #
   #     - name: Import Apple Developer Certificate
@@ -198,7 +182,7 @@ jobs:
   #     - name: Sign DMG with Developer ID
   #       run: |
   #         codesign --deep --force --sign "Developer ID Application: Your Name (${{ secrets.APPLE_TEAM_ID }})" \
-  #           "dmg_downloads/${{ matrix.dmg_file }}"
+  #           "dmg_downloads/locallens-agent-${{ github.ref_name }}-macos-arm64.dmg"
   #
   #     - name: Notarize DMG
   #       env:
@@ -206,7 +190,7 @@ jobs:
   #         APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
   #         APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
   #       run: |
-  #         xcrun notarytool submit "dmg_downloads/${{ matrix.dmg_file }}" \
+  #         xcrun notarytool submit "dmg_downloads/locallens-agent-${{ github.ref_name }}-macos-arm64.dmg" \
   #           --apple-id "$APPLE_ID" \
   #           --password "$APPLE_APP_PASSWORD" \
   #           --team-id "$APPLE_TEAM_ID" \
@@ -214,12 +198,12 @@ jobs:
   #
   #     - name: Staple notarization ticket
   #       run: |
-  #         xcrun stapler staple "dmg_downloads/${{ matrix.dmg_file }}"
+  #         xcrun stapler staple "dmg_downloads/locallens-agent-${{ github.ref_name }}-macos-arm64.dmg"
   #
   #     - name: Re-upload notarized DMG
   #       uses: softprops/action-gh-release@v2
   #       with:
-  #         files: dmg_downloads/${{ matrix.dmg_file }}
+  #         files: dmg_downloads/locallens-agent-${{ github.ref_name }}-macos-arm64.dmg
   #       env:
   #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   # ─────────────────────────────────────────────────────────────────────────────
@@ -228,7 +212,6 @@ jobs:
     name: Update Homebrew Cask
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Only run after BOTH tray builds succeed
     needs: build-tray-mac
     steps:
       - name: Download arm64 DMG
@@ -238,20 +221,11 @@ jobs:
           fileName: locallens-agent-${{ github.ref_name }}-macos-arm64.dmg
           out-file-path: dmg_downloads
 
-      - name: Download x86_64 DMG
-        uses: robinraju/release-downloader@v1.11
-        with:
-          tag: ${{ github.ref_name }}
-          fileName: locallens-agent-${{ github.ref_name }}-macos-x86_64.dmg
-          out-file-path: dmg_downloads
-
-      - name: Compute SHA256 checksums
+      - name: Compute SHA256 checksum
         id: sha
         run: |
           ARM64_SHA=$(shasum -a 256 "dmg_downloads/locallens-agent-${{ github.ref_name }}-macos-arm64.dmg" | awk '{print $1}')
-          X86_SHA=$(shasum -a 256 "dmg_downloads/locallens-agent-${{ github.ref_name }}-macos-x86_64.dmg" | awk '{print $1}')
           echo "arm64=$ARM64_SHA" >> $GITHUB_OUTPUT
-          echo "x86_64=$X86_SHA" >> $GITHUB_OUTPUT
           echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
 
       - name: Checkout Homebrew tap
@@ -265,7 +239,6 @@ jobs:
         run: |
           VERSION="${{ steps.sha.outputs.version }}"
           ARM64_SHA="${{ steps.sha.outputs.arm64 }}"
-          X86_SHA="${{ steps.sha.outputs.x86_64 }}"
 
           CASK="homebrew-tap/Casks/locallens-agent.rb"
 
@@ -276,15 +249,8 @@ jobs:
               printf 'cask "locallens-agent" do\n'
               printf '  version "PLACEHOLDER_VERSION"\n'
               printf '\n'
-              printf '  on_arm do\n'
-              printf '    url "https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v#{version}/locallens-agent-v#{version}-macos-arm64.dmg"\n'
-              printf '    sha256 "PLACEHOLDER_ARM64_SHA"\n'
-              printf '  end\n'
-              printf '\n'
-              printf '  on_intel do\n'
-              printf '    url "https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v#{version}/locallens-agent-v#{version}-macos-x86_64.dmg"\n'
-              printf '    sha256 "PLACEHOLDER_X86_SHA"\n'
-              printf '  end\n'
+              printf '  url "https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v#{version}/locallens-agent-v#{version}-macos-arm64.dmg"\n'
+              printf '  sha256 "PLACEHOLDER_SHA"\n'
               printf '\n'
               printf '  name "LocalLens Agent"\n'
               printf '  desc "System tray agent for LocalLens privacy-first photo organizer"\n'
@@ -302,8 +268,7 @@ jobs:
 
           # Replace version and sha256 values in-place
           sed -i "s/version \".*\"/version \"${VERSION}\"/" "$CASK"
-          sed -i "/on_arm/,/end/{s/sha256 \".*\"/sha256 \"${ARM64_SHA}\"/}" "$CASK"
-          sed -i "/on_intel/,/end/{s/sha256 \".*\"/sha256 \"${X86_SHA}\"/}" "$CASK"
+          sed -i "s/sha256 \".*\"/sha256 \"${ARM64_SHA}\"/" "$CASK"
 
           echo "Updated Cask to v${VERSION}"
           cat "$CASK"
