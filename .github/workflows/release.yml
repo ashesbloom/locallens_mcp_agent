@@ -12,6 +12,7 @@ jobs:
   build:
     name: Build Binary (${{ matrix.os }} - ${{ matrix.arch }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -79,6 +80,7 @@ jobs:
   build-tray-mac:
     name: Build Tray App (macOS - ${{ matrix.arch }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -109,16 +111,35 @@ jobs:
         # py2app uses setup_tray_mac.py (distutils-style), which conflicts with
         # pyproject.toml when both exist in the same directory. We temporarily
         # rename pyproject.toml so py2app's modulegraph doesn't choke on it.
+        timeout-minutes: 30
         run: |
           mv pyproject.toml pyproject.toml.bak
           python setup_tray_mac.py py2app
           mv pyproject.toml.bak pyproject.toml
 
-      - name: Create DMG
+      - name: Ad-hoc sign the app bundle
+        # This is NOT a full Apple notarization (which requires a paid Developer
+        # account), but it removes the "app is damaged" error and is required for
+        # the xattr quarantine removal in the Homebrew Cask to work reliably.
+        # Full notarization can be layered on later by adding APPLE_CERTIFICATE
+        # secrets — the signing step below would be replaced by a proper identity.
         run: |
+          codesign --deep --force --sign - "dist/LocalLens Agent.app"
+
+      - name: Build DMG (with app + Gatekeeper fix script)
+        # The fix_locallens_agent.command file is bundled inside the DMG so that
+        # users who install manually can just double-click it — no Terminal needed.
+        run: |
+          chmod +x fix_locallens_agent.command
+
+          # Stage DMG contents: app + fix script
+          mkdir -p dmg_staging
+          cp -r "dist/LocalLens Agent.app" dmg_staging/
+          cp fix_locallens_agent.command "dmg_staging/Fix LocalLens Agent.command"
+
           hdiutil create \
             -volname "LocalLens Agent" \
-            -srcfolder "dist/LocalLens Agent.app" \
+            -srcfolder dmg_staging \
             -ov -format UDZO \
             "${{ matrix.dmg_file }}"
 
@@ -129,3 +150,169 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # ─────────────────────────────────────────────────────────────────────────────
+  # FUTURE: Apple Developer Notarization
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Uncomment and configure this job when an Apple Developer Program subscription
+  # is active. Required secrets to add in repo settings:
+  #   APPLE_CERTIFICATE          — Base64-encoded Developer ID Application .p12
+  #   APPLE_CERTIFICATE_PASSWORD — Password for the .p12 certificate
+  #   APPLE_ID                   — Apple ID email used for notarization
+  #   APPLE_APP_PASSWORD         — App-specific password (appleid.apple.com)
+  #   APPLE_TEAM_ID              — 10-char Team ID from developer.apple.com
+  #
+  # notarize-mac:
+  #   name: Notarize & Staple DMG (macOS)
+  #   runs-on: macos-latest
+  #   timeout-minutes: 30
+  #   needs: build-tray-mac
+  #   strategy:
+  #     matrix:
+  #       include:
+  #         - arch: arm64
+  #           dmg_file: locallens-agent-${{ github.ref_name }}-macos-arm64.dmg
+  #         - arch: x86_64
+  #           dmg_file: locallens-agent-${{ github.ref_name }}-macos-x86_64.dmg
+  #   steps:
+  #     - name: Download DMG
+  #       uses: robinraju/release-downloader@v1.11
+  #       with:
+  #         tag: ${{ github.ref_name }}
+  #         fileName: ${{ matrix.dmg_file }}
+  #         out-file-path: dmg_downloads
+  #
+  #     - name: Import Apple Developer Certificate
+  #       env:
+  #         APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+  #         APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+  #       run: |
+  #         echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
+  #         security create-keychain -p "" build.keychain
+  #         security default-keychain -s build.keychain
+  #         security unlock-keychain -p "" build.keychain
+  #         security import certificate.p12 -k build.keychain \
+  #           -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+  #         security set-key-partition-list -S apple-tool:,apple: -s \
+  #           -k "" build.keychain
+  #
+  #     - name: Sign DMG with Developer ID
+  #       run: |
+  #         codesign --deep --force --sign "Developer ID Application: Your Name (${{ secrets.APPLE_TEAM_ID }})" \
+  #           "dmg_downloads/${{ matrix.dmg_file }}"
+  #
+  #     - name: Notarize DMG
+  #       env:
+  #         APPLE_ID: ${{ secrets.APPLE_ID }}
+  #         APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+  #         APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+  #       run: |
+  #         xcrun notarytool submit "dmg_downloads/${{ matrix.dmg_file }}" \
+  #           --apple-id "$APPLE_ID" \
+  #           --password "$APPLE_APP_PASSWORD" \
+  #           --team-id "$APPLE_TEAM_ID" \
+  #           --wait
+  #
+  #     - name: Staple notarization ticket
+  #       run: |
+  #         xcrun stapler staple "dmg_downloads/${{ matrix.dmg_file }}"
+  #
+  #     - name: Re-upload notarized DMG
+  #       uses: softprops/action-gh-release@v2
+  #       with:
+  #         files: dmg_downloads/${{ matrix.dmg_file }}
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  update-homebrew-cask:
+    name: Update Homebrew Cask
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Only run after BOTH tray builds succeed
+    needs: build-tray-mac
+    steps:
+      - name: Download arm64 DMG
+        uses: robinraju/release-downloader@v1.11
+        with:
+          tag: ${{ github.ref_name }}
+          fileName: locallens-agent-${{ github.ref_name }}-macos-arm64.dmg
+          out-file-path: dmg_downloads
+
+      - name: Download x86_64 DMG
+        uses: robinraju/release-downloader@v1.11
+        with:
+          tag: ${{ github.ref_name }}
+          fileName: locallens-agent-${{ github.ref_name }}-macos-x86_64.dmg
+          out-file-path: dmg_downloads
+
+      - name: Compute SHA256 checksums
+        id: sha
+        run: |
+          ARM64_SHA=$(shasum -a 256 "dmg_downloads/locallens-agent-${{ github.ref_name }}-macos-arm64.dmg" | awk '{print $1}')
+          X86_SHA=$(shasum -a 256 "dmg_downloads/locallens-agent-${{ github.ref_name }}-macos-x86_64.dmg" | awk '{print $1}')
+          echo "arm64=$ARM64_SHA" >> $GITHUB_OUTPUT
+          echo "x86_64=$X86_SHA" >> $GITHUB_OUTPUT
+          echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: ashesbloom/homebrew-locallens
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update Cask formula
+        run: |
+          VERSION="${{ steps.sha.outputs.version }}"
+          ARM64_SHA="${{ steps.sha.outputs.arm64 }}"
+          X86_SHA="${{ steps.sha.outputs.x86_64 }}"
+
+          CASK="homebrew-tap/Casks/locallens-agent.rb"
+
+          # Bootstrap the cask file if it does not yet exist in the tap repo
+          if [ ! -f "$CASK" ]; then
+            mkdir -p "$(dirname "$CASK")"
+            cat > "$CASK" << 'CASK_EOF'
+cask "locallens-agent" do
+  version "PLACEHOLDER_VERSION"
+
+  on_arm do
+    url "https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v#{version}/locallens-agent-v#{version}-macos-arm64.dmg"
+    sha256 "PLACEHOLDER_ARM64_SHA"
+  end
+
+  on_intel do
+    url "https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v#{version}/locallens-agent-v#{version}-macos-x86_64.dmg"
+    sha256 "PLACEHOLDER_X86_SHA"
+  end
+
+  name "LocalLens Agent"
+  desc "System tray agent for LocalLens privacy-first photo organizer"
+  homepage "https://locallens.app"
+
+  app "LocalLens Agent.app"
+
+  zap trash: [
+    "~/.config/LocalLens",
+  ]
+end
+CASK_EOF
+            echo "Bootstrapped new cask file from template"
+          fi
+
+          # Replace version and sha256 values in-place
+          sed -i "s/version \".*\"/version \"${VERSION}\"/" "$CASK"
+          sed -i "/on_arm/,/end/{s/sha256 \".*\"/sha256 \"${ARM64_SHA}\"/}" "$CASK"
+          sed -i "/on_intel/,/end/{s/sha256 \".*\"/sha256 \"${X86_SHA}\"/}" "$CASK"
+
+          echo "Updated Cask to v${VERSION}"
+          cat "$CASK"
+
+      - name: Commit and push Cask update
+        run: |
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/locallens-agent.rb
+          git commit -m "chore: update locallens-agent to ${{ github.ref_name }}"
+          git push
