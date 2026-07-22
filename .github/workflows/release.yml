@@ -164,13 +164,15 @@ jobs:
       - name: Build tray app with PyInstaller
         run: pyinstaller locallens-tray-win.spec
 
+      - name: Install NSIS
+        run: choco install nsis --no-progress -y
+
       - name: Build NSIS installer
         shell: pwsh
         env:
           APP_VERSION: ${{ github.ref_name }}
         run: |
-          # makensis is available on GitHub Windows runners
-          makensis /DAPP_VERSION=${{ github.ref_name }} installer_win.nsi
+          & "C:\Program Files (x86)\NSIS\makensis.exe" /DAPP_VERSION=${{ github.ref_name }} installer_win.nsi
           Move-Item locallens-agent-installer.exe "locallens-agent-${{ github.ref_name }}-windows-x86_64-setup.exe"
 
       - name: Upload Windows installer
