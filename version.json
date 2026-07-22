@@ -1,9 +1,18 @@
 {
   "mcp": {
-    "latest": "1.0.14",
+    "latest": "1.0.16",
     "min_supported": "1.0.0",
     "release_notes_url": "https://github.com/ashesbloom/locallens_mcp_agent/releases/latest",
     "changelog": [
+      {
+        "version": "1.0.16",
+        "date": "July 2026",
+        "highlights": [
+          "Added Windows Tray App CI workflow with NSIS installer bundling",
+          "Fixed UPX corruption on Windows binaries preventing python3xx.dll LoadLibrary failures",
+          "Improved Windows tray dialogs with native prompts for missing LocalLens & Claude Desktop"
+        ]
+      },
       {
         "version": "1.0.13",
         "date": "July 2026",

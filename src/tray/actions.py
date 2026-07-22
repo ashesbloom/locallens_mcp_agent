@@ -356,13 +356,26 @@ def start_locallens():
     print(f"[LocalLens] install_dir from install_dir.txt: {install_dir}")
 
     if not install_dir or not install_dir.exists():
-        _show_alert(
-            "LocalLens Not Found",
-            "Could not find LocalLens installation.\n\n"
-            f"Expected path: {install_dir or 'unknown (install_dir.txt missing or empty)'}\n\n"
-            "Opening releases page."
-        )
-        open_locallens_releases()
+        if sys.platform == "win32":
+            import ctypes
+            # MB_YESNO (4) + MB_ICONQUESTION (32): Yes=6, No=7
+            msg = (
+                "LocalLens desktop app was not found on this machine.\n\n"
+                "The tray needs the LocalLens backend to be installed first.\n\n"
+                "Click Download to open the releases page and grab the latest installer,\n"
+                "or Cancel to close this dialog."
+            )
+            result = ctypes.windll.user32.MessageBoxW(0, msg, "LocalLens Not Installed", 4 | 32)
+            if result == 6:  # Yes
+                open_locallens_releases()
+        else:
+            _show_alert(
+                "LocalLens Not Found",
+                "Could not find LocalLens installation.\n\n"
+                f"Expected path: {install_dir or 'unknown (install_dir.txt missing or empty)'}\n\n"
+                "Opening releases page."
+            )
+            open_locallens_releases()
         return False
 
     try:
@@ -688,7 +701,19 @@ def claude_setup() -> dict:
     try:
         res = install_claude_connector(force=False)
         msg = res.get("message", json.dumps(res))
-        _show_alert("Claude Setup", msg)
+        # On Windows, if Claude Desktop is missing, offer a direct download button
+        if sys.platform == "win32" and res.get("status") == "error" and "claude.ai/download" in msg:
+            import ctypes
+            prompt = (
+                "Claude Desktop does not appear to be installed.\n\n"
+                "Click Download to open the Claude Desktop download page,\n"
+                "then install and launch it once before connecting."
+            )
+            result = ctypes.windll.user32.MessageBoxW(0, prompt, "Claude Not Installed", 4 | 32)
+            if result == 6:  # Yes / Download
+                webbrowser.open("https://claude.ai/download")
+        else:
+            _show_alert("Claude Setup", msg)
         return res
     except Exception as e:
         _show_alert("Claude Setup Error", str(e))
