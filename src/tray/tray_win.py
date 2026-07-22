@@ -87,6 +87,13 @@ def on_ll_status(icon, item):
         icon.update_menu()
         result = start_locallens()
         _ll_starting = False
+        if result == "not_installed":
+            # User was shown the download prompt and either clicked No/Cancel
+            # or opened the browser. Either way, quit the tray — there's
+            # nothing it can do without LocalLens being installed.
+            _stop_event.set()
+            icon.stop()
+            return
         if result is not False:
             _managed_ll_pids = result if isinstance(result, list) else []
             _ll_running = is_locallens_running()
@@ -126,12 +133,29 @@ def on_quit(icon, item):
         stop_all_backends()
     icon.stop()
 
-def run_win_tray():
-    # Start background polling thread
-    t = threading.Thread(target=status_updater, daemon=True)
-    t.start()
-    
-    # Generate a programmatic "LL" icon — no external icon file needed
+def _load_tray_icon() -> Image.Image:
+    """
+    Load the bundled black LL icon (visible on both light and dark taskbars).
+    Tries the PyInstaller bundle path first, then the dev-mode project root.
+    Falls back to a dark programmatic icon if the file can't be found.
+    """
+    # Candidate paths: frozen bundle (_MEIPASS) → dev-mode project root
+    candidates = []
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        candidates.append(os.path.join(sys._MEIPASS, "icons", "ll_black", "32x32.png"))
+    # Dev-mode: icons/ sits two levels above this file (src/tray/tray_win.py)
+    dev_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    candidates.append(os.path.join(dev_root, "icons", "ll_black", "32x32.png"))
+
+    for path in candidates:
+        if os.path.exists(path):
+            try:
+                img = Image.open(path).convert("RGBA")
+                return img
+            except Exception:
+                pass  # corrupt file — fall through to programmatic fallback
+
+    # Fallback: draw dark text so it's at least visible on light themes
     from PIL import ImageDraw, ImageFont
     image = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
@@ -141,7 +165,17 @@ def run_win_tray():
         font = ImageFont.load_default()
     bbox = draw.textbbox((0, 0), "LL", font=font)
     tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    draw.text(((64 - tw) / 2, (64 - th) / 2), "LL", fill="white", font=font)
+    # Use dark color (works on light taskbars; pystray inverts on dark themes)
+    draw.text(((64 - tw) / 2, (64 - th) / 2), "LL", fill="#1a1a1a", font=font)
+    return image
+
+
+def run_win_tray():
+    # Start background polling thread
+    t = threading.Thread(target=status_updater, daemon=True)
+    t.start()
+
+    image = _load_tray_icon()
 
     claude_submenu = pystray.Menu(
         pystray.MenuItem("Connect to Claude", on_claude_setup),

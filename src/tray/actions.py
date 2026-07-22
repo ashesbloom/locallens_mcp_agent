@@ -362,12 +362,20 @@ def start_locallens():
             msg = (
                 "LocalLens desktop app was not found on this machine.\n\n"
                 "The tray needs the LocalLens backend to be installed first.\n\n"
-                "Click Download to open the releases page and grab the latest installer,\n"
-                "or Cancel to close this dialog."
+                "Would you like to open the download page to get the installer?\n"
+                "(Click Yes to open the browser, or No to close this dialog.)"
             )
             result = ctypes.windll.user32.MessageBoxW(0, msg, "LocalLens Not Installed", 4 | 32)
-            if result == 6:  # Yes
+            if result == 6:  # Yes — open releases page then confirm
                 open_locallens_releases()
+                ctypes.windll.user32.MessageBoxW(
+                    0,
+                    "The LocalLens download page has been opened in your browser.\n\n"
+                    "Install LocalLens and then restart the LocalLens Agent tray.",
+                    "Download Started",
+                    0x40  # MB_ICONINFORMATION
+                )
+            return "not_installed"
         else:
             _show_alert(
                 "LocalLens Not Found",
