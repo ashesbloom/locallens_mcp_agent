@@ -19,7 +19,8 @@ Page instfiles
 Section "Install"
     SetOutPath "$INSTDIR"
     ; Copy everything PyInstaller put in dist\LocalLens Agent\
-    File /r "dist\LocalLens Agent\*.*"
+    ; Use * not *.* — the Windows *.* glob skips extension-less files
+    File /r "dist\LocalLens Agent\*"
 
     ; Write uninstaller and registry entries
     WriteUninstaller "$INSTDIR\Uninstall.exe"

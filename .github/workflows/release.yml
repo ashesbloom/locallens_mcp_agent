@@ -164,6 +164,17 @@ jobs:
       - name: Build tray app with PyInstaller
         run: pyinstaller locallens-tray-win.spec
 
+      - name: Verify PyInstaller output
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist\LocalLens Agent\LocalLens Agent.exe")) {
+            Write-Error "PyInstaller output not found at dist\LocalLens Agent\"
+            Get-ChildItem dist -Recurse | Select-Object FullName
+            exit 1
+          }
+          Write-Host "PyInstaller output OK:"
+          Get-ChildItem "dist\LocalLens Agent" | Select-Object Name, Length
+
       - name: Install NSIS
         run: choco install nsis --no-progress -y
 

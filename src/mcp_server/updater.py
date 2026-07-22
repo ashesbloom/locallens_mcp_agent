@@ -46,6 +46,12 @@ import httpx
 from packaging.version import Version, InvalidVersion
 
 logger = logging.getLogger(__name__)
+if not logger.handlers:
+    _h = logging.StreamHandler(sys.stderr)
+    _h.setFormatter(logging.Formatter("[locallens-mcp] %(levelname)s: %(message)s"))
+    logger.addHandler(_h)
+    logger.setLevel(logging.DEBUG)
+    logger.propagate = False
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 

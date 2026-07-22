@@ -1,5 +1,7 @@
 import json
+import logging
 import sys
+import os
 import argparse
 from mcp.server.fastmcp import FastMCP
 
@@ -157,6 +159,18 @@ def main():
         sys.exit(0)
 
     # ── Default: start the MCP server ──────────────────────────────────────
+    if sys.platform == "win32":
+        # Prevent CRLF translation from corrupting the JSON-RPC stdio channel
+        import msvcrt
+        msvcrt.setmode(sys.stdin.fileno(), os.O_BINARY)
+        msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
+
+    # Suppress any root-logger handlers that might leak to stdout
+    logging.root.handlers = [
+        h for h in logging.root.handlers
+        if not (isinstance(h, logging.StreamHandler) and h.stream is sys.stdout)
+    ]
+
     app = create_mcp_app()
     app.run()
 
