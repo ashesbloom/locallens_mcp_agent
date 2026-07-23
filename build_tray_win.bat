@@ -12,11 +12,12 @@ pip install .[tray]
 pip install pyinstaller
 
 echo Cleaning old builds...
-rmdir /S /Q build
-rmdir /S /Q dist
+taskkill /F /IM "LocalLens Agent.exe" 2>nul
+rmdir /S /Q build 2>nul
+rmdir /S /Q dist 2>nul
 
 echo Building application...
-pyinstaller --noconfirm --onedir --windowed --name "LocalLens Agent" locallens_tray_entrypoint.py
+pyinstaller --noconfirm locallens-tray-win.spec
 
-echo Build complete! The executable is located in the dist/ folder.
+echo Build complete! The executable is located in dist/LocalLens Agent/LocalLens Agent.exe
 pause
