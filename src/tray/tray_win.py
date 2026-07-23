@@ -16,6 +16,7 @@ import threading
 import time
 import sys
 import os
+import signal
 import ctypes
 import pystray
 from PIL import Image
@@ -416,7 +417,7 @@ def on_ll_status(icon, item):
                 _stop_event.set()
                 if _icon:
                     _icon.stop()
-                return
+                os._exit(0)
 
             if result is not False:
                 _managed_ll_pids = result if isinstance(result, list) else []
@@ -609,6 +610,7 @@ def on_quit(icon, item):
     elif _cached_ll_running and not _cached_app_running:
         stop_all_backends()
     icon.stop()
+    os._exit(0)  # ensure the process truly exits; pystray.stop() alone can leave a zombie on Windows
 
 
 # ── Build menu and run ────────────────────────────────────────────────────────

@@ -356,32 +356,64 @@ def start_locallens():
     print(f"[LocalLens] install_dir from install_dir.txt: {install_dir}")
 
     if not install_dir or not install_dir.exists():
+        # --- Fallback: probe standard OS install paths for the sidecar exe ---
+        # For production users (installed via .msi / .dmg) the backend is a
+        # PyInstaller executable bundled inside the Tauri desktop app, not a
+        # Python source tree.  Try to find it directly before giving up.
+        backend_exe = find_locallens_backend_exe()
+        if backend_exe:
+            print(f"[LocalLens] Found production backend_server exe at {backend_exe}")
+            import tempfile
+            stderr_log = Path(tempfile.gettempdir()) / "locallens_backend_start.log"
+            with open(stderr_log, "w") as err_fh:
+                if sys.platform == "win32":
+                    proc = subprocess.Popen(
+                        [str(backend_exe)],
+                        stdout=subprocess.DEVNULL,
+                        stderr=err_fh,
+                        creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW,
+                    )
+                else:
+                    proc = subprocess.Popen(
+                        [str(backend_exe)],
+                        stdout=subprocess.DEVNULL,
+                        stderr=err_fh,
+                    )
+            print(f"[LocalLens] backend_server launched, PID={proc.pid}")
+            # Wait up to 10 s for the HTTP server to come up
+            from .status import is_locallens_running
+            for _ in range(20):
+                time.sleep(0.5)
+                if is_locallens_running():
+                    return [proc.pid]
+            return [proc.pid]  # return PID even if HTTP check timed out
+
+        # --- No installation found — prompt to download ---
         if sys.platform == "win32":
             import ctypes
             # MB_YESNO (4) + MB_ICONQUESTION (32): Yes=6, No=7
             msg = (
-                "LocalLens desktop app was not found on this machine.\n\n"
-                "The tray needs the LocalLens backend to be installed first.\n\n"
-                "Would you like to open the download page to get the installer?\n"
-                "(Click Yes to open the browser, or No to close this dialog.)"
+                "Local Lens desktop app was not found on this machine.\n\n"
+                "The MCP Agent needs Local Lens installed to start the backend.\n\n"
+                "Click Yes to open the download page, or No to close this dialog."
             )
-            result = ctypes.windll.user32.MessageBoxW(0, msg, "LocalLens Not Installed", 4 | 32)
+            result = ctypes.windll.user32.MessageBoxW(0, msg, "Local Lens Not Installed", 4 | 32)
             if result == 6:  # Yes — open releases page then confirm
                 open_locallens_releases()
                 ctypes.windll.user32.MessageBoxW(
                     0,
-                    "The LocalLens download page has been opened in your browser.\n\n"
-                    "Install LocalLens and then restart the LocalLens Agent tray.",
+                    "The Local Lens download page has been opened in your browser.\n\n"
+                    "Install Local Lens and then restart the LocalLens Agent tray.",
                     "Download Started",
                     0x40  # MB_ICONINFORMATION
                 )
             return "not_installed"
         else:
             _show_alert(
-                "LocalLens Not Found",
-                "Could not find LocalLens installation.\n\n"
+                "Local Lens Not Found",
+                "Could not find Local Lens installation.\n\n"
                 f"Expected path: {install_dir or 'unknown (install_dir.txt missing or empty)'}\n\n"
-                "Opening releases page."
+                "Opening the download page."
             )
             open_locallens_releases()
         return False
@@ -677,8 +709,72 @@ def stop_all_backends() -> bool:
         return False
 
 def open_locallens_releases():
-    """Open the LocalLens releases page in the default browser."""
-    webbrowser.open("https://github.com/ashesbloom/locallens_mcp_agent/releases")
+    """Open the LocalLens desktop app releases page in the default browser."""
+    webbrowser.open("https://github.com/ashesbloom/LocalLens/releases/latest")
+
+
+def find_locallens_backend_exe() -> Path:
+    """
+    Locate the LocalLens backend_server executable for *production* installs
+    (i.e. users who installed via the .msi/.dmg installer, not from source).
+
+    The backend is a PyInstaller sidecar bundled inside the Tauri desktop app.
+    The LocalLens app writes install_info.json to the app-data dir on first
+    launch (once that feature is added).  Until then we probe the standard
+    OS install paths that Tauri's NSIS/dmg installers use.
+
+    Returns the Path to backend_server[.exe] if found, else None.
+    """
+    candidates = []
+
+    if sys.platform == "win32":
+        # 1. Prefer install_info.json written by the LocalLens app itself
+        install_info = APP_DIR / "install_info.json"
+        if install_info.exists():
+            try:
+                info = json.loads(install_info.read_text())
+                exe = Path(info.get("backend_exe", ""))
+                if exe.exists():
+                    return exe
+            except Exception:
+                pass
+
+        # 2. Standard Tauri NSIS install locations
+        for base_var in ("LOCALAPPDATA", "PROGRAMFILES", "PROGRAMFILES(X86)"):
+            base = os.environ.get(base_var, "")
+            if base:
+                candidates.append(Path(base) / "Local Lens" / "backend_server.exe")
+                candidates.append(Path(base) / "LocalLens" / "backend_server.exe")
+        # 3. Possible roaming appdata location
+        appdata = os.environ.get("APPDATA", "")
+        if appdata:
+            candidates.append(Path(appdata) / "Local Lens" / "backend_server.exe")
+
+    elif sys.platform == "darwin":
+        # 1. Prefer install_info.json
+        install_info = Path.home() / "Library" / "Application Support" / "LocalLens" / "install_info.json"
+        if install_info.exists():
+            try:
+                info = json.loads(install_info.read_text())
+                exe = Path(info.get("backend_exe", ""))
+                if exe.exists():
+                    return exe
+            except Exception:
+                pass
+
+        # 2. Standard macOS .app bundle sidecar locations
+        candidates += [
+            Path("/Applications/Local Lens.app/Contents/MacOS/backend_server"),
+            Path("/Applications/LocalLens.app/Contents/MacOS/backend_server"),
+            Path.home() / "Applications" / "Local Lens.app" / "Contents" / "MacOS" / "backend_server",
+        ]
+
+    for p in candidates:
+        if p.exists():
+            print(f"[LocalLens] find_locallens_backend_exe: found {p}")
+            return p
+
+    return None
 
 def show_claude_status_terminal():
     """Open a terminal showing Claude MCP logs."""
@@ -714,11 +810,11 @@ def claude_setup() -> dict:
             import ctypes
             prompt = (
                 "Claude Desktop does not appear to be installed.\n\n"
-                "Click Download to open the Claude Desktop download page,\n"
-                "then install and launch it once before connecting."
+                "Would you like to open the Claude Desktop download page?\n"
+                "Click Yes to open the browser, or No to skip."
             )
             result = ctypes.windll.user32.MessageBoxW(0, prompt, "Claude Not Installed", 4 | 32)
-            if result == 6:  # Yes / Download
+            if result == 6:  # Yes — open download page
                 webbrowser.open("https://claude.ai/download")
         else:
             _show_alert("Claude Setup", msg)
