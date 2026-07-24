@@ -8,9 +8,9 @@
         "version": "1.0.18",
         "date": "July 2026",
         "highlights": [
-          "Added workflow_dispatch manual trigger to GitHub release workflow",
-          "Fixed pyproject.toml backup cleanup trap in macOS tray build script",
-          "Improved Windows single-instance mutex and dialog thread safety"
+          "Added workflow_dispatch trigger to release pipeline",
+          "Fixed macOS tray build pyproject.toml cleanup trap",
+          "Improved Windows tray single-instance mutex and dialog threading"
         ]
       },
       {
