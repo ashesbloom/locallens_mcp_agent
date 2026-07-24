@@ -295,8 +295,11 @@ def _confirm_action(title, message):
         return res == 1
     elif sys.platform == "win32":
         import ctypes
-        res = ctypes.windll.user32.MessageBoxW(0, message, title, 1)
-        return res == 1
+        MB_YESNO = 0x04
+        MB_ICONQUESTION = 0x20
+        IDYES = 6
+        res = ctypes.windll.user32.MessageBoxW(0, message, title, MB_YESNO | MB_ICONQUESTION)
+        return res == IDYES
 
 def open_claude():
     """Launch the Claude desktop application or open browser if not found."""

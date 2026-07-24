@@ -3,6 +3,19 @@ set -e
 
 echo "Building LocalLens Agent for macOS..."
 
+# Ensure pyproject.toml is restored if a previous build crashed or failed
+cleanup() {
+    if [ ! -f "pyproject.toml" ] && [ -f "pyproject.toml.bak" ]; then
+        mv pyproject.toml.bak pyproject.toml 2>/dev/null || true
+    elif [ -f "pyproject.toml.bak" ] && [ -f "pyproject.toml" ]; then
+        rm -f pyproject.toml.bak 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+
+# Restore immediately if starting in a broken state from a prior failed run
+cleanup
+
 # Check for virtual environment
 if [ ! -d "venv" ]; then
     echo "Creating virtual environment..."
@@ -30,3 +43,4 @@ if command -v hdiutil &> /dev/null; then
 else
     echo "Build complete! .app is located in the dist/ folder."
 fi
+

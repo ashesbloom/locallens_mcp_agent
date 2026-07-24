@@ -305,20 +305,26 @@ def on_open_claude(icon, item):
 
 
 def on_claude_setup(icon, item):
-    """Connect to Claude in the foreground (reads a small JSON file — fast)."""
+    """Connect to Claude — runs in a background thread so the tray stays responsive."""
     global _claude_action_in_progress
+    if _claude_action_in_progress:
+        return
     _claude_action_in_progress = True
     if _icon:
         _icon.update_menu()
-    res = {"status": "error"}
-    try:
-        res = claude_setup()
-    finally:
-        _claude_action_in_progress = False
-        _refresh_claude_state_now()
-    # Offer optional custom instructions after a successful connect
-    if res.get("status") in ("installed", "updated", "already_connected"):
-        _show_claude_instructions_dialog()
+
+    def _setup_bg():
+        global _claude_action_in_progress
+        res = {"status": "error"}
+        try:
+            res = claude_setup()
+        finally:
+            _claude_action_in_progress = False
+            _refresh_claude_state_now()
+        if res.get("status") in ("installed", "updated", "already_connected"):
+            _show_claude_instructions_dialog()
+
+    threading.Thread(target=_setup_bg, daemon=True).start()
 
 
 def _refresh_claude_state_now():
@@ -337,14 +343,21 @@ def on_claude_status_check(icon, item):
 
 def on_claude_remove(icon, item):
     global _claude_action_in_progress
+    if _claude_action_in_progress:
+        return
     _claude_action_in_progress = True
     if _icon:
         _icon.update_menu()
-    try:
-        claude_remove()
-    finally:
-        _claude_action_in_progress = False
-        _refresh_claude_state_now()
+
+    def _remove_bg():
+        global _claude_action_in_progress
+        try:
+            claude_remove()
+        finally:
+            _claude_action_in_progress = False
+            _refresh_claude_state_now()
+
+    threading.Thread(target=_remove_bg, daemon=True).start()
 
 
 def on_copy_instructions(icon, item):
