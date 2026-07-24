@@ -37,6 +37,18 @@ if %ERRORLEVEL% neq 0 (
 )
 
 echo.
+echo Building locallens-mcp.exe (bundled alongside the tray so "Connect to
+echo Claude" can find it without a separate pip/uv install)...
+pyinstaller --noconfirm locallens-mcp.spec
+if %ERRORLEVEL% neq 0 (
+    echo.
+    echo BUILD FAILED building locallens-mcp.exe! See errors above.
+    pause
+    exit /b 1
+)
+copy /Y "dist\locallens-mcp.exe" "dist\LocalLens Agent\locallens-mcp.exe" >nul
+
+echo.
 echo Build complete!
 echo Executable: dist\LocalLens Agent\LocalLens Agent.exe
 pause

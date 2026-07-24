@@ -165,12 +165,27 @@ jobs:
       - name: Build tray app with PyInstaller
         run: pyinstaller locallens-tray-win.spec
 
+      - name: Build locallens-mcp.exe and bundle it alongside the tray
+        # get_mcp_command_config() (claude_connector.py) looks for
+        # locallens-mcp.exe next to the tray's own executable when running
+        # as a bundled PyInstaller build. Without it, "Connect to Claude"
+        # falls through to a PATH search and fails on machines that never
+        # separately pip-installed locallens-mcp.
+        shell: pwsh
+        run: |
+          pyinstaller locallens-mcp.spec
+          Copy-Item "dist\locallens-mcp.exe" "dist\LocalLens Agent\locallens-mcp.exe"
+
       - name: Verify PyInstaller output
         shell: pwsh
         run: |
           if (-not (Test-Path "dist\LocalLens Agent\LocalLens Agent.exe")) {
             Write-Error "PyInstaller output not found at dist\LocalLens Agent\"
             Get-ChildItem dist -Recurse | Select-Object FullName
+            exit 1
+          }
+          if (-not (Test-Path "dist\LocalLens Agent\locallens-mcp.exe")) {
+            Write-Error "locallens-mcp.exe was not bundled into dist\LocalLens Agent\"
             exit 1
           }
           Write-Host "PyInstaller output OK:"
