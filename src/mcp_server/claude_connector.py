@@ -571,20 +571,12 @@ def install_claude_connector(force: bool = False) -> Dict[str, Any]:
     try:
         config_path = get_claude_config_path()
 
-        # Guard: Claude Desktop directory must exist
-        if not config_path.parent.exists():
-            return {
-                "status": "error",
-                "config_path": str(config_path),
-                "command": None,
-                "message": (
-                    "Claude Desktop does not appear to be installed. "
-                    "Download it from https://claude.ai/download and launch it once, "
-                    "then run this command again."
-                ),
-                "backup_path": None,
-                "claude_needs_restart": False,
-            }
+        # Ensure Claude Desktop config directory exists — create it if needed.
+        # On Windows, Claude Desktop only creates %APPDATA%/Claude/ after its
+        # first launch, but users expect "Connect to Claude" to work right
+        # after installing Claude Desktop (before opening it). Creating the
+        # directory early is safe; Claude Desktop will adopt it on next launch.
+        config_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Verify binary is resolvable before touching the config
         binary_check = verify_mcp_binary()

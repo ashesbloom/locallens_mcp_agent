@@ -373,14 +373,14 @@ class TestInstallClaudeConnector:
         written = json.loads(tmp_config.read_text())
         assert written["mcpServers"]["locallens"]["command"] == "/new/path/locallens-mcp"
 
-    def test_error_when_claude_not_installed(self, tmp_path):
-        """If Claude Desktop dir doesn't exist, return a helpful error."""
+    def test_creates_config_dir_when_missing(self, tmp_path):
+        """If Claude Desktop dir doesn't exist, create it and proceed."""
         missing = tmp_path / "NoClaudeDir" / "claude_desktop_config.json"
         with _patch_config_path(missing):
             result = install_claude_connector()
 
-        assert result["status"] == "error"
-        assert "not appear to be installed" in result["message"]
+        assert result["status"] == "installed"
+        assert missing.parent.exists()
 
     def test_error_when_binary_invalid(self, tmp_config):
         """If the binary can't be found, return an error before touching config."""

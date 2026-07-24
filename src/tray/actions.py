@@ -143,11 +143,16 @@ def install_mcp_update(latest_version: str, release_notes_url: str, upgrade_comm
 
     # pip / source install — upgrade in-place
     try:
-        result = subprocess.run(
-            [_sys.executable, "-m", "pip", "install", "--upgrade", "locallens-mcp"],
+        kwargs = dict(
             capture_output=True,
             text=True,
             timeout=120,
+        )
+        if _sys.platform == "win32":
+            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+        result = subprocess.run(
+            [_sys.executable, "-m", "pip", "install", "--upgrade", "locallens-mcp"],
+            **kwargs,
         )
         if result.returncode == 0:
             return {"method": "pip", "success": True, "output": result.stdout}
@@ -372,6 +377,7 @@ def start_locallens():
                 if sys.platform == "win32":
                     proc = subprocess.Popen(
                         [str(backend_exe)],
+                        stdin=subprocess.DEVNULL,
                         stdout=subprocess.DEVNULL,
                         stderr=err_fh,
                         creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW,
@@ -469,6 +475,7 @@ def start_locallens():
                 subprocess.Popen(
                     [str(python_exe), str(main_script)],
                     cwd=str(install_dir),
+                    stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL,
                     stderr=err_fh,
                     env=clean_env,

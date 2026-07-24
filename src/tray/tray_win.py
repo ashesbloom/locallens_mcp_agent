@@ -338,7 +338,7 @@ def _refresh_claude_state_now():
 
 
 def on_claude_status_check(icon, item):
-    claude_status()
+    threading.Thread(target=claude_status, daemon=True).start()
 
 
 def on_claude_remove(icon, item):
@@ -361,7 +361,7 @@ def on_claude_remove(icon, item):
 
 
 def on_copy_instructions(icon, item):
-    _show_claude_instructions_dialog()
+    threading.Thread(target=_show_claude_instructions_dialog, daemon=True).start()
 
 
 def _show_claude_instructions_dialog():
@@ -444,12 +444,13 @@ def on_ll_status(icon, item):
 
     elif _cached_app_running and not _ll_starting:
         # ── DESKTOP APP IS RUNNING: don't touch it ───────────────────────
-        _msg_box(
-            "LocalLens is Running",
-            "The LocalLens desktop app is currently open.\n"
-            "Close the desktop app first if you want the agent "
-            "to manage the backend."
-        )
+        with _pending_alerts_lock:
+            _pending_alerts.append((
+                "LocalLens is Running",
+                "The LocalLens desktop app is currently open.\n"
+                "Close the desktop app first if you want the agent "
+                "to manage the backend."
+            ))
 
     elif _cached_ll_running and not _cached_app_running and not _ll_starting and not _ll_stopping:
         # ── BACKEND ALIVE BUT APP GONE: stop in background ───────────────
@@ -521,45 +522,48 @@ def on_check_updates(icon, item):
 
 def on_update_details(icon, item):
     """Show update details or current version info."""
-    mcp_u = _cached_update_info.get("mcp")
-    app_u = _cached_update_info.get("app")
-    info = _cached_app_info
+    def _details_bg():
+        mcp_u = _cached_update_info.get("mcp")
+        app_u = _cached_update_info.get("app")
+        info = _cached_app_info
 
-    if not mcp_u and not app_u:
-        mcp_ver = info.get("mcp_version", "unknown")
-        tier = info.get("license_tier", "Free")
-        app_ver = info.get("app_version")
-        app_line = f"LocalLens App v{app_ver}" if app_ver else "LocalLens App: not running"
-        _msg_box(
-            "You're Up to Date  ✓",
-            f"MCP Agent v{mcp_ver} · {tier} Plan\n{app_line}\n\n"
-            "Everything is on the latest version."
-        )
-        return
+        if not mcp_u and not app_u:
+            mcp_ver = info.get("mcp_version", "unknown")
+            tier = info.get("license_tier", "Free")
+            app_ver = info.get("app_version")
+            app_line = f"LocalLens App v{app_ver}" if app_ver else "LocalLens App: not running"
+            _msg_box(
+                "You're Up to Date  ✓",
+                f"MCP Agent v{mcp_ver} · {tier} Plan\n{app_line}\n\n"
+                "Everything is on the latest version."
+            )
+            return
 
-    lines = []
-    if mcp_u:
-        lines.append(
-            f"MCP Agent — v{mcp_u['latest_version']} available  "
-            f"(you have v{mcp_u['current_version']})"
-        )
-        for h in mcp_u.get("highlights", []):
-            lines.append(f"   • {h}")
-    if app_u:
-        if lines:
-            lines.append("")
-        lines.append(
-            f"LocalLens App — v{app_u['latest_version']} available  "
-            f"(you have v{app_u['current_version']})"
-        )
+        lines = []
+        if mcp_u:
+            lines.append(
+                f"MCP Agent — v{mcp_u['latest_version']} available  "
+                f"(you have v{mcp_u['current_version']})"
+            )
+            for h in mcp_u.get("highlights", []):
+                lines.append(f"   • {h}")
+        if app_u:
+            if lines:
+                lines.append("")
+            lines.append(
+                f"LocalLens App — v{app_u['latest_version']} available  "
+                f"(you have v{app_u['current_version']})"
+            )
 
-    msg = "\n".join(lines) + "\n\nWould you like to install the update?"
-    if _confirm("Update Available", msg):
-        on_install_update(icon, item)
+        msg = "\n".join(lines) + "\n\nWould you like to install the update?"
+        if _confirm("Update Available", msg):
+            _install_update_bg()
+
+    threading.Thread(target=_details_bg, daemon=True).start()
 
 
-def on_install_update(icon, item):
-    """One-click update: pip-upgrade for source installs, browser for frozen builds."""
+def _install_update_bg():
+    """Shared update logic — always call from a background thread."""
     mcp_u = _cached_update_info.get("mcp")
     info = _cached_app_info
     mcp_ver = info.get("mcp_version", "unknown")
@@ -607,11 +611,15 @@ def on_install_update(icon, item):
                 "Try updating manually from the releases page.",
                 MB_OK | MB_ICONWARNING,
             )
-    # method == "browser": releases page already opened — no extra alert needed
+
+
+def on_install_update(icon, item):
+    """One-click update: pip-upgrade for source installs, browser for frozen builds."""
+    threading.Thread(target=_install_update_bg, daemon=True).start()
 
 
 def on_help(icon, item):
-    show_help_tips()
+    threading.Thread(target=show_help_tips, daemon=True).start()
 
 
 def on_quit(icon, item):
@@ -630,6 +638,17 @@ def on_quit(icon, item):
 
 def run_win_tray():
     global _icon
+
+    # ── Single-instance enforcement via Win32 named mutex ─────────────
+    _mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "LocalLensAgent_SingleInstance")
+    if ctypes.windll.kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+        _msg_box(
+            "Already Running",
+            "LocalLens Agent is already running.\n\n"
+            "Check the system tray (bottom-right, near the clock).",
+            MB_OK | MB_ICONINFO,
+        )
+        os._exit(0)
 
     # ── Start background threads ─────────────────────────────────────────
     threading.Thread(target=_poll_status, daemon=True).start()

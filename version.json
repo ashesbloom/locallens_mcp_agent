@@ -1,9 +1,18 @@
 {
   "mcp": {
-    "latest": "1.0.16",
+    "latest": "1.0.18",
     "min_supported": "1.0.0",
     "release_notes_url": "https://github.com/ashesbloom/locallens_mcp_agent/releases/latest",
     "changelog": [
+      {
+        "version": "1.0.18",
+        "date": "July 2026",
+        "highlights": [
+          "Added workflow_dispatch manual trigger to GitHub release workflow",
+          "Fixed pyproject.toml backup cleanup trap in macOS tray build script",
+          "Improved Windows single-instance mutex and dialog thread safety"
+        ]
+      },
       {
         "version": "1.0.16",
         "date": "July 2026",
