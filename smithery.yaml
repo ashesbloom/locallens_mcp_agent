@@ -1,0 +1,18 @@
+# Smithery configuration: https://smithery.ai/docs/config#smitheryyaml
+# LocalLens MCP — bridges AI assistants to the LocalLens privacy-first photo organizer.
+# Requires LocalLens desktop app running locally (https://locallens.app).
+name: locallens-mcp
+target: local
+
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties: {}
+    additionalProperties: false
+  commandFunction: |-
+    (config) => ({
+      command: "uvx",
+      args: ["locallens-mcp"],
+      env: { "LOCALLENS_STORE_URL": "https://locallens.app" }
+    })

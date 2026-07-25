@@ -969,17 +969,20 @@ def claude_setup() -> dict:
     try:
         res = install_claude_connector(force=False)
         msg = res.get("message", json.dumps(res))
-        # On Windows, if Claude Desktop is missing, offer a direct download button
-        if sys.platform == "win32" and res.get("status") == "error" and "claude.ai/download" in msg:
-            import ctypes
-            prompt = (
-                "Claude Desktop does not appear to be installed.\n\n"
-                "Would you like to open the Claude Desktop download page?\n"
-                "Click Yes to open the browser, or No to skip."
-            )
-            result = ctypes.windll.user32.MessageBoxW(0, prompt, "Claude Not Installed", 4 | 32)
-            if result == 6:  # Yes — open download page
-                webbrowser.open("https://claude.ai/download")
+        if res.get("status") == "error":
+            # On Windows, if Claude Desktop is missing, offer a direct download button
+            if sys.platform == "win32" and "claude.ai/download" in msg:
+                import ctypes
+                prompt = (
+                    "Claude Desktop does not appear to be installed.\n\n"
+                    "Would you like to open the Claude Desktop download page?\n"
+                    "Click Yes to open the browser, or No to skip."
+                )
+                result = ctypes.windll.user32.MessageBoxW(0, prompt, "Claude Not Installed", 4 | 32)
+                if result == 6:  # Yes — open download page
+                    webbrowser.open("https://claude.ai/download")
+            else:
+                _show_alert("Claude Setup — Error", msg)
         else:
             _show_alert("Claude Setup", msg)
         return res
