@@ -4,12 +4,9 @@ LocalLens MCP Agent connects Claude Desktop (or any MCP-compatible AI assistant)
 
 ---
 
-## What's New in v1.0.20
+## What's New in v1.0.21
 
-- Fixed Claude Desktop setup PATH for frozen/bundled builds
-- Added silent in-app auto-updater with SHA256 verification and progress UI
-- Fixed Windows backend console window visibility
-- Fixed CI test failure: added psutil to dev extras
+- Fixed CI test failure: added psutil to dev extras so tray module tests run in pip install .[dev]
 
 ---
 
@@ -26,10 +23,10 @@ LocalLens MCP Agent connects Claude Desktop (or any MCP-compatible AI assistant)
 
 | Platform | File | Type |
 |----------|------|------|
-| macOS (Apple Silicon) | [locallens-agent-macos-arm64.dmg](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v1.0.20/locallens-agent-v1.0.20-macos-arm64.dmg) | Menu Bar App |
-| macOS (Apple Silicon) | [locallens-mcp-macos-arm64.zip](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v1.0.20/locallens-mcp-v1.0.20-macos-arm64.zip) | MCP Binary |
-| Windows (x64) | [locallens-mcp-windows-x86_64.zip](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v1.0.20/locallens-mcp-v1.0.20-windows-x86_64.zip) | MCP Binary |
-| Linux (x64) | [locallens-mcp-linux-x86_64.tar.gz](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v1.0.20/locallens-mcp-v1.0.20-linux-x86_64.tar.gz) | MCP Binary |
+| macOS (Apple Silicon) | [locallens-agent-macos-arm64.dmg](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v1.0.21/locallens-agent-v1.0.21-macos-arm64.dmg) | Menu Bar App |
+| macOS (Apple Silicon) | [locallens-mcp-macos-arm64.zip](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v1.0.21/locallens-mcp-v1.0.21-macos-arm64.zip) | MCP Binary |
+| Windows (x64) | [locallens-mcp-windows-x86_64.zip](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v1.0.21/locallens-mcp-v1.0.21-windows-x86_64.zip) | MCP Binary |
+| Linux (x64) | [locallens-mcp-linux-x86_64.tar.gz](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v1.0.21/locallens-mcp-v1.0.21-linux-x86_64.tar.gz) | MCP Binary |
 
 ---
 
@@ -51,7 +48,7 @@ The menu bar app will be available in your Applications folder.
      xattr -cr "/Applications/LocalLens Agent.app" && codesign --force --deep --sign - "/Applications/LocalLens Agent.app"
      \`\`\`
 
-1. Download `locallens-agent-v1.0.20-macos-arm64.dmg`
+1. Download `locallens-agent-v1.0.21-macos-arm64.dmg`
 2. Open the DMG and drag **LocalLens Agent** to Applications
 3. Run the included **Fix LocalLens Agent.command** to clear macOS Gatekeeper
 4. Launch from Applications — look for the `LL` icon in your menu bar
@@ -60,7 +57,7 @@ The menu bar app will be available in your Applications folder.
 
 \`\`\`bash
 # Extract and set up
-tar -xzf locallens-mcp-v1.0.20-macos-arm64.tar.gz   # or .zip on macOS
+tar -xzf locallens-mcp-v1.0.21-macos-arm64.tar.gz   # or .zip on macOS
 ./locallens-mcp --setup-claude
 
 # Restart Claude Desktop to activate

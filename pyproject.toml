@@ -45,6 +45,7 @@ chat = [
 dev = [
     "pyinstaller>=6.0.0",
     "pytest>=7.0.0",
+    "psutil>=5.9.0",
 ]
 tray = [
     "psutil>=5.9.0",

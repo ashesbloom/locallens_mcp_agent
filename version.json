@@ -6,12 +6,20 @@
     "downloads": {},
     "changelog": [
       {
+        "version": "1.0.21",
+        "date": "July 2026",
+        "highlights": [
+          "Fixed CI test failure: added psutil to dev extras so tray module tests run in pip install .[dev]"
+        ]
+      },
+      {
         "version": "1.0.20",
         "date": "July 2026",
         "highlights": [
           "Fixed Claude Desktop setup PATH for frozen/bundled builds",
           "Added silent in-app auto-updater with SHA256 verification and progress UI",
-          "Fixed Windows backend console window visibility (STARTUPINFO/SW_HIDE defense-in-depth)"
+          "Fixed Windows backend console window visibility",
+          "Fixed CI test failure: added psutil to dev extras"
         ]
       },
       {
