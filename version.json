@@ -1,6 +1,6 @@
 {
   "mcp": {
-    "latest": "1.0.23",
+    "latest": "1.0.24",
     "min_supported": "1.0.0",
     "release_notes_url": "https://github.com/ashesbloom/locallens_mcp_agent/releases/latest",
     "downloads": {
@@ -14,6 +14,13 @@
       }
     },
     "changelog": [
+      {
+        "version": "1.0.24",
+        "date": "July 2026",
+        "highlights": [
+          "Fix Windows MSIX config path bug for Claude Desktop Connector"
+        ]
+      },
       {
         "version": "1.0.23",
         "date": "July 2026",

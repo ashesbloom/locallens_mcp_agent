@@ -63,6 +63,48 @@ except ImportError:
 # ── Claude Config Path ─────────────────────────────────────────────────────────
 
 
+def _find_msix_claude_config_dir() -> Optional[Path]:
+    """
+    Probe for Claude Desktop's MSIX-virtualized config directory on Windows.
+
+    When Claude Desktop is installed via the Windows Store (MSIX package),
+    Windows filesystem virtualisation silently redirects Claude's own
+    reads/writes of %APPDATA%\\Claude\\ to a package-private LocalCache path:
+
+        %LOCALAPPDATA%\\Packages\\Claude_<PFN>\\LocalCache\\Roaming\\Claude\\
+
+    External processes (like our tray app) that write to the real %APPDATA%
+    directory are invisible to Claude's MSIX sandbox, which is why the
+    connector appears "installed" to us but never shows up in Claude.
+
+    This function globs %LOCALAPPDATA%\\Packages\\Claude_* to find the package
+    directory without hardcoding the Package Family Name suffix (which may
+    change when Anthropic updates their signing certificate or package identity).
+
+    Returns the LocalCache config *directory* Path if found, else None.
+    """
+    local_appdata = os.environ.get("LOCALAPPDATA")
+    if not local_appdata:
+        return None
+
+    packages_dir = Path(local_appdata) / "Packages"
+    if not packages_dir.is_dir():
+        return None
+
+    # Glob for any MSIX package whose name starts with "Claude_"
+    # e.g. Claude_pzs8sxrjxfjjc  — the suffix is the publisher hash and
+    # can change across releases, so we match by prefix only.
+    for pkg_dir in packages_dir.glob("Claude_*"):
+        if not pkg_dir.is_dir():
+            continue
+        candidate = pkg_dir / "LocalCache" / "Roaming" / "Claude"
+        if candidate.is_dir():
+            _log.debug("MSIX Claude package dir found: %s", candidate)
+            return candidate
+
+    return None
+
+
 def get_claude_config_path() -> Path:
     """
     Return the absolute path to Claude Desktop's config JSON file.
@@ -70,8 +112,14 @@ def get_claude_config_path() -> Path:
     Supports macOS, Windows, and Linux (future-proofing even though Claude
     Desktop doesn't officially ship on Linux yet).
 
+    On Windows, probes for the MSIX-virtualized config directory first
+    (%LOCALAPPDATA%\\Packages\\Claude_*\\LocalCache\\Roaming\\Claude\\)
+    and falls back to the legacy %APPDATA%\\Claude\\ path used by the
+    standalone EXE installer.  See _find_msix_claude_config_dir() for the
+    full explanation of why this matters.
+
     Raises:
-        RuntimeError: If APPDATA is unset on Windows.
+        RuntimeError: If APPDATA is unset on Windows (non-MSIX path).
         NotImplementedError: If running on an unsupported platform.
     """
     if sys.platform == "darwin":
@@ -83,9 +131,20 @@ def get_claude_config_path() -> Path:
             / "claude_desktop_config.json"
         )
     elif sys.platform == "win32":
+        # ── MSIX install (Windows Store) ──────────────────────────────────
+        # Check the virtualised LocalCache path first.  If the directory
+        # exists, that's where Claude is reading its config from, regardless
+        # of whether the config file itself has been created yet.
+        msix_dir = _find_msix_claude_config_dir()
+        if msix_dir is not None:
+            _log.debug("Using MSIX config path: %s", msix_dir)
+            return msix_dir / "claude_desktop_config.json"
+
+        # ── Standalone EXE install (non-MSIX) ────────────────────────────
         appdata = os.environ.get("APPDATA")
         if not appdata:
             raise RuntimeError("APPDATA environment variable is not set on Windows.")
+        _log.debug("Using legacy APPDATA config path")
         return Path(appdata) / "Claude" / "claude_desktop_config.json"
     else:
         # Linux — ~/.config/Claude/ mirrors the XDG convention Claude Desktop

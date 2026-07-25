@@ -121,6 +121,7 @@ class TestGetClaudeConfigPath:
         assert "Library" in path.parts  # macOS-specific
 
     def test_windows(self):
+        """Non-MSIX install: falls back to %APPDATA%\\Claude\\ when no MSIX dir found."""
         fake_appdata = "C:\\Users\\User\\AppData\\Roaming"
         with (
             patch("sys.platform", "win32"),
@@ -130,11 +131,57 @@ class TestGetClaudeConfigPath:
         assert str(path).endswith("claude_desktop_config.json")
         assert "Claude" in path.parts
 
-    def test_windows_no_appdata(self):
-        env_without_appdata = {k: v for k, v in os.environ.items() if k != "APPDATA"}
+    def test_windows_msix_install(self, tmp_path):
+        """MSIX install: uses LocalCache virtualised path when the package directory exists."""
+        # Create the MSIX package directory structure (no config file yet — just the dir)
+        msix_claude_dir = (
+            tmp_path / "Packages" / "Claude_fakepfn123" / "LocalCache" / "Roaming" / "Claude"
+        )
+        msix_claude_dir.mkdir(parents=True)
+
+        fake_appdata = str(tmp_path / "Roaming")
         with (
             patch("sys.platform", "win32"),
-            patch.dict(os.environ, env_without_appdata, clear=True),
+            patch.dict(os.environ, {"LOCALAPPDATA": str(tmp_path), "APPDATA": fake_appdata}),
+        ):
+            path = get_claude_config_path()
+
+        assert path.name == "claude_desktop_config.json"
+        # Must be inside the MSIX LocalCache tree, not %APPDATA%
+        assert "LocalCache" in path.parts
+        assert "Claude_fakepfn123" in path.parts
+
+    def test_windows_msix_takes_precedence_over_appdata(self, tmp_path):
+        """MSIX path wins even when a config file also exists in %APPDATA%."""
+        # MSIX dir present
+        msix_claude_dir = (
+            tmp_path / "Packages" / "Claude_xyzabc" / "LocalCache" / "Roaming" / "Claude"
+        )
+        msix_claude_dir.mkdir(parents=True)
+        (msix_claude_dir / "claude_desktop_config.json").write_text("{}")
+
+        # Also create a legacy APPDATA config
+        appdata_claude_dir = tmp_path / "Roaming" / "Claude"
+        appdata_claude_dir.mkdir(parents=True)
+        (appdata_claude_dir / "claude_desktop_config.json").write_text("{}")
+
+        with (
+            patch("sys.platform", "win32"),
+            patch.dict(os.environ, {"LOCALAPPDATA": str(tmp_path), "APPDATA": str(tmp_path / "Roaming")}),
+        ):
+            path = get_claude_config_path()
+
+        assert "LocalCache" in path.parts  # MSIX wins
+
+    def test_windows_no_appdata(self):
+        """No APPDATA and no MSIX dir raises RuntimeError."""
+        env_without_appdata_or_localappdata = {
+            k: v for k, v in os.environ.items()
+            if k not in ("APPDATA", "LOCALAPPDATA")
+        }
+        with (
+            patch("sys.platform", "win32"),
+            patch.dict(os.environ, env_without_appdata_or_localappdata, clear=True),
         ):
             with pytest.raises(RuntimeError, match="APPDATA"):
                 get_claude_config_path()
