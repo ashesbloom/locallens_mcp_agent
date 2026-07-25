@@ -411,8 +411,8 @@ class TestInstallClaudeConnector:
         assert result["backup_path"] is not None
         assert Path(result["backup_path"]).exists()
 
-    def test_version_meta_block_injected(self, tmp_config):
-        """The injected entry must contain a _locallens_meta block."""
+    def test_no_unknown_keys_in_entry(self, tmp_config):
+        """The injected entry must only contain command, args, env — no extra keys."""
         with (
             _patch_config_path(tmp_config),
             patch("mcp_server.claude_connector.verify_mcp_binary",
@@ -424,10 +424,7 @@ class TestInstallClaudeConnector:
 
         written = json.loads(tmp_config.read_text())
         entry = written["mcpServers"]["locallens"]
-        assert "_locallens_meta" in entry
-        assert "version" in entry["_locallens_meta"]
-        assert "installed_at" in entry["_locallens_meta"]
-        assert entry["_locallens_meta"]["installed_by"] == "locallens-mcp-connector"
+        assert set(entry.keys()) == {"command", "args", "env"}
 
     def test_corrupt_config_gets_backed_up_then_overwritten(self, corrupt_config):
         """A corrupt config must be backed up and then replaced with valid JSON."""

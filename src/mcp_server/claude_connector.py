@@ -10,8 +10,7 @@ Design Principles:
   2. Non-destructive — always preserve every other mcpServer in the config.
   3. Idempotent — re-running install is safe; skips if already up to date.
   4. Backup — creates a timestamped backup before every write (capped at 5).
-  5. Version-aware — embeds a _locallens_meta block so future runs can detect
-     stale configs and update them automatically.
+  5. Version-aware — uses _MCP_VERSION for status reporting.
   6. Offline-first — all logic is purely local filesystem; no network needed.
 
 Integration Points:
@@ -30,7 +29,7 @@ import os
 import shutil
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -508,17 +507,6 @@ def _atomic_write(config_path: Path, config: Dict[str, Any]) -> None:
     _log.debug("Atomic write complete: %s", config_path)
 
 
-def _make_meta_block() -> Dict[str, Any]:
-    """Return a metadata block to embed inside our injected config entry."""
-    return {
-        "_locallens_meta": {
-            "installed_by": "locallens-mcp-connector",
-            "version": _MCP_VERSION,
-            "installed_at": datetime.now(timezone.utc).isoformat(),
-            "install_method": detect_install_method(),
-        }
-    }
-
 
 # ── Public API ─────────────────────────────────────────────────────────────────
 
@@ -602,21 +590,12 @@ def install_claude_connector(force: bool = False) -> Dict[str, Any]:
         config.setdefault("mcpServers", {})
 
         # Build our intended entry
-        desired_entry = {
-            **get_mcp_command_config(),
-            **_make_meta_block(),
-        }
+        desired_entry = get_mcp_command_config()
 
-        # Idempotency check (compare command + args + env, ignoring meta timestamp)
+        # Idempotency check
         existing = config["mcpServers"].get(_MCP_KEY)
         if existing and not force:
-            existing_comparable = {
-                k: v for k, v in existing.items() if k != "_locallens_meta"
-            }
-            desired_comparable = {
-                k: v for k, v in desired_entry.items() if k != "_locallens_meta"
-            }
-            if existing_comparable == desired_comparable:
+            if existing == desired_entry:
                 return {
                     "status": "already_connected",
                     "config_path": str(config_path),

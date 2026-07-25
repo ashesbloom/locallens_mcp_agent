@@ -1,6 +1,6 @@
 {
   "mcp": {
-    "latest": "1.0.20",
+    "latest": "1.0.22",
     "min_supported": "1.0.0",
     "release_notes_url": "https://github.com/ashesbloom/locallens_mcp_agent/releases/latest",
     "downloads": {
@@ -14,6 +14,14 @@
       }
     },
     "changelog": [
+      {
+        "version": "1.0.22",
+        "date": "July 2026",
+        "highlights": [
+          "Fixed backend exe launch logic to correctly find sidecar server",
+          "Removed internal metadata from claude config injection to fix compatibility with Claude Desktop"
+        ]
+      },
       {
         "version": "1.0.21",
         "date": "July 2026",
