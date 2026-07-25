@@ -453,6 +453,38 @@ def open_claude():
         print(f"Error opening Claude: {e}")
         webbrowser.open("https://claude.ai")
 
+def _launch_backend_exe(backend_exe: Path):
+    """Launch a production sidecar backend_server executable and wait for HTTP readiness."""
+    import tempfile
+    from .status import is_locallens_running
+    stderr_log = Path(tempfile.gettempdir()) / "locallens_backend_start.log"
+    with open(stderr_log, "w") as err_fh:
+        if sys.platform == "win32":
+            si = subprocess.STARTUPINFO()
+            si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            si.wShowWindow = 0  # SW_HIDE
+            proc = subprocess.Popen(
+                [str(backend_exe)],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=err_fh,
+                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW,
+                startupinfo=si,
+            )
+        else:
+            proc = subprocess.Popen(
+                [str(backend_exe)],
+                stdout=subprocess.DEVNULL,
+                stderr=err_fh,
+            )
+    print(f"[LocalLens] backend_server launched, PID={proc.pid}")
+    for _ in range(20):
+        time.sleep(0.5)
+        if is_locallens_running():
+            return [proc.pid]
+    return [proc.pid]
+
+
 def start_locallens():
     """
     Start the LocalLens backend silently.
@@ -496,35 +528,7 @@ def start_locallens():
         backend_exe = find_locallens_backend_exe()
         if backend_exe:
             print(f"[LocalLens] Found production backend_server exe at {backend_exe}")
-            import tempfile
-            stderr_log = Path(tempfile.gettempdir()) / "locallens_backend_start.log"
-            with open(stderr_log, "w") as err_fh:
-                if sys.platform == "win32":
-                    si = subprocess.STARTUPINFO()
-                    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                    si.wShowWindow = 0  # SW_HIDE
-                    proc = subprocess.Popen(
-                        [str(backend_exe)],
-                        stdin=subprocess.DEVNULL,
-                        stdout=subprocess.DEVNULL,
-                        stderr=err_fh,
-                        creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW,
-                        startupinfo=si,
-                    )
-                else:
-                    proc = subprocess.Popen(
-                        [str(backend_exe)],
-                        stdout=subprocess.DEVNULL,
-                        stderr=err_fh,
-                    )
-            print(f"[LocalLens] backend_server launched, PID={proc.pid}")
-            # Wait up to 10 s for the HTTP server to come up
-            from .status import is_locallens_running
-            for _ in range(20):
-                time.sleep(0.5)
-                if is_locallens_running():
-                    return [proc.pid]
-            return [proc.pid]  # return PID even if HTTP check timed out
+            return _launch_backend_exe(backend_exe)
 
         # --- No installation found — prompt to download ---
         if sys.platform == "win32":
@@ -557,6 +561,13 @@ def start_locallens():
         return False
 
     try:
+        # Production installs have a sidecar exe, not a venv — check that first
+        sidecar_name = "backend_server.exe" if sys.platform == "win32" else "backend_server"
+        sidecar = install_dir / sidecar_name
+        if sidecar.exists():
+            print(f"[LocalLens] Found sidecar exe in install_dir: {sidecar}")
+            return _launch_backend_exe(sidecar)
+
         if sys.platform == "win32":
             python_exe = install_dir / "venv" / "Scripts" / "python.exe"
         else:
