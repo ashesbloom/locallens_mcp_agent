@@ -56,7 +56,7 @@ if not logger.handlers:
 # ── Constants ──────────────────────────────────────────────────────────────────
 
 # Current version of this MCP package — bump this on every release
-MCP_VERSION = "1.0.19"
+MCP_VERSION = "1.0.20"
 
 # How often to check for updates (hours). Users never get hammered.
 TTL_HOURS = 24
@@ -71,6 +71,15 @@ VERSION_URL = os.getenv(
 
 # Local cache file
 _CACHE_FILE = Path.home() / ".config" / "LocalLens" / "mcp_update_cache.json"
+
+
+def _get_platform_key() -> str:
+    """Key into mcp.downloads in version.json for this OS/arch combo."""
+    if sys.platform == "darwin":
+        return "macos-arm64"
+    if sys.platform == "win32":
+        return "windows-x86_64"
+    return "linux-x86_64"
 
 
 # ── Core logic ─────────────────────────────────────────────────────────────────
@@ -205,6 +214,12 @@ def check_for_updates(force: bool = False) -> Optional[Dict[str, Any]]:
                 highlights = entry.get("highlights", [])
                 break
 
+        # Platform-specific signed download + checksum, populated by CI on
+        # release (see .github/workflows/release.yml). Empty strings if this
+        # release predates the auto-updater or CI hasn't updated the
+        # manifest yet — callers fall back to the browser flow in that case.
+        download_info = mcp_info.get("downloads", {}).get(_get_platform_key(), {})
+
         return {
             "update_available": True,
             "current_version": MCP_VERSION,
@@ -219,6 +234,8 @@ def check_for_updates(force: bool = False) -> Optional[Dict[str, Any]]:
                 if getattr(sys, "frozen", False)
                 else "pip install --upgrade locallens-mcp"
             ),
+            "download_url": download_info.get("url", ""),
+            "sha256": download_info.get("sha256", ""),
         }
 
     except (InvalidVersion, Exception) as e:

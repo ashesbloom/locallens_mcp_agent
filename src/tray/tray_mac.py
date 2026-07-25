@@ -26,6 +26,14 @@ _stop_polling = False
 # Thread-safe queue for error messages to be shown on the main thread.
 # Background threads append (title, message) tuples; the @rumps.timer drains it.
 _pending_alerts: list = []
+# Set by the update-download background thread; drained by the @rumps.timer
+# to show "Downloading… NN%" without the timer's normal refresh stomping it.
+# None = no download in progress.
+_update_download_pct: int = None
+# Set by the update installer when a silent macOS install finished and
+# swapped in the new .app — AppKit calls like quit_application() must run
+# on the main thread, so the background thread just flags this.
+_pending_quit: bool = False
 
 # {"mcp": dict|None, "app": dict|None} — see check_updates_now() in actions.py
 _cached_update_info: dict = {"mcp": None, "app": None}
@@ -247,6 +255,12 @@ class LocalLensAgentApp(rumps.App):
             title, message = _pending_alerts.pop(0)
             rumps.alert(title=title, message=message, ok="OK")
 
+        global _pending_quit
+        if _pending_quit:
+            _pending_quit = False
+            rumps.quit_application()
+            return
+
         self._update_claude_button()
         self._update_ll_button()
         self._update_updates_button()
@@ -305,7 +319,9 @@ class LocalLensAgentApp(rumps.App):
             self.btn_info_app.title = "  ℹ  LocalLens App: Not Running"
 
         # ── Install / up-to-date button ───────────────────────────────────────
-        if mcp_u and mcp_u.get("update_available"):
+        if _update_download_pct is not None:
+            self.btn_install_update.title = f"⬇  Downloading update… {_update_download_pct}%"
+        elif mcp_u and mcp_u.get("update_available"):
             self.btn_install_update.title = f"⬇  Install Update v{mcp_u['latest_version']}…"
         else:
             self.btn_install_update.title = "✓  MCP Agent is Up to Date"
@@ -402,7 +418,9 @@ class LocalLensAgentApp(rumps.App):
             self.on_install_update(sender)
 
     def on_install_update(self, sender):
-        """One-click update: pip-upgrade for source installs, browser for frozen builds."""
+        """One-click update: silent download+install for frozen builds (when
+        the manifest has signed download info), pip-upgrade for source
+        installs, browser fallback otherwise."""
         mcp_u = _cached_update_info.get("mcp")
         info = _cached_app_info
         mcp_ver = info.get("mcp_version", "unknown")
@@ -417,39 +435,100 @@ class LocalLensAgentApp(rumps.App):
         latest = mcp_u["latest_version"]
         highlights = mcp_u.get("highlights", [])
         hl_text = ("\n" + "\n".join(f"   • {h}" for h in highlights[:5])) if highlights else ""
+        has_silent_download = bool(mcp_u.get("download_url") and mcp_u.get("sha256"))
 
-        res = rumps.alert(
-            f"Install MCP Update v{latest}",
+        body = (
             f"Current version: v{mcp_ver}\n"
             f"New version:     v{latest}"
             f"{hl_text}\n\n"
+        )
+        body += (
+            "LocalLens Agent will download and install this update in the\n"
+            "background, then restart automatically."
+            if has_silent_download else
             "The download page will open in your browser.\n"
-            "Replace the existing app with the new one after downloading.",
+            "Replace the existing app with the new one after downloading."
+        )
+
+        res = rumps.alert(
+            f"Install MCP Update v{latest}",
+            body,
             ok="Download & Install",
             cancel="Not Now",
         )
         if res != 1:
             return
 
-        result = install_mcp_update(
-            latest_version=latest,
-            release_notes_url=mcp_u.get("release_notes_url", ""),
-            upgrade_command=mcp_u.get("upgrade_command", ""),
-        )
+        if not has_silent_download:
+            result = install_mcp_update(
+                latest_version=latest,
+                release_notes_url=mcp_u.get("release_notes_url", ""),
+                upgrade_command=mcp_u.get("upgrade_command", ""),
+            )
+            self._handle_install_result(result, latest)
+            return
 
-        if result.get("method") == "pip":
+        # Silent path: download/verify/install take real time (network +
+        # DMG mount) — run off the main thread so the menu stays responsive,
+        # and report progress/results through the same _pending_alerts /
+        # _update_download_pct channels the 1s main-thread timer drains.
+        global _update_download_pct
+        _update_download_pct = 0
+
+        def _progress(downloaded, total):
+            global _update_download_pct
+            _update_download_pct = int(downloaded * 100 / total) if total else 0
+
+        def _install_bg():
+            global _update_download_pct
+            result = install_mcp_update(
+                latest_version=latest,
+                release_notes_url=mcp_u.get("release_notes_url", ""),
+                upgrade_command=mcp_u.get("upgrade_command", ""),
+                download_url=mcp_u.get("download_url", ""),
+                sha256=mcp_u.get("sha256", ""),
+                progress_cb=_progress,
+            )
+            _update_download_pct = None
+            self._handle_install_result(result, latest)
+
+        threading.Thread(target=_install_bg, daemon=True).start()
+
+    def _handle_install_result(self, result: dict, latest: str):
+        """
+        Report an install_mcp_update() result. Safe to call from a
+        background thread — queues alerts/quit for the main-thread timer
+        instead of touching AppKit directly.
+        """
+        global _pending_quit
+        if result.get("method") == "silent":
             if result.get("success"):
-                rumps.alert(
+                if result.get("restart_required"):
+                    _pending_quit = True
+                else:
+                    _pending_alerts.append((
+                        "Update Installed  ✓",
+                        f"LocalLens MCP has been updated to v{latest}.",
+                    ))
+            else:
+                _pending_alerts.append((
+                    "Update Failed",
+                    f"Could not install v{latest}:\n\n{result.get('error', 'Unknown error')}\n\n"
+                    "Try updating manually from the releases page.",
+                ))
+        elif result.get("method") == "pip":
+            if result.get("success"):
+                _pending_alerts.append((
                     "Update Installed  ✓",
                     f"LocalLens MCP has been updated to v{latest}.\n"
-                    "Restart LocalLens Agent for the changes to take effect."
-                )
+                    "Restart LocalLens Agent for the changes to take effect.",
+                ))
             else:
-                rumps.alert(
+                _pending_alerts.append((
                     "Update Failed",
                     f"Could not install v{latest} via pip:\n\n{result.get('error', 'Unknown error')}\n\n"
                     "Try updating manually from the releases page.",
-                )
+                ))
         # method == "browser": releases page already opened — no extra alert needed
 
     def on_open_claude(self, sender):

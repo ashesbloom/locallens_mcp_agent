@@ -56,6 +56,9 @@ _ll_stopping = False
 
 # Update cache
 _cached_update_info: dict = {"mcp": None, "app": None}
+# Set by the update-download background thread; read by _install_update_title.
+# None = no download in progress.
+_update_download_pct: int = None
 _notified_update_versions: set = set()
 _cached_app_info: dict = {
     "mcp_version": "…", "license_tier": "Free",
@@ -292,6 +295,8 @@ def _info_app_title(_item=None):
 
 
 def _install_update_title(_item=None):
+    if _update_download_pct is not None:
+        return f"⬇  Downloading update… {_update_download_pct}%"
     mcp_u = _cached_update_info.get("mcp")
     if mcp_u and mcp_u.get("update_available"):
         return f"⬇  Install Update v{mcp_u['latest_version']}…"
@@ -564,6 +569,7 @@ def on_update_details(icon, item):
 
 def _install_update_bg():
     """Shared update logic — always call from a background thread."""
+    global _update_download_pct
     mcp_u = _cached_update_info.get("mcp")
     info = _cached_app_info
     mcp_ver = info.get("mcp_version", "unknown")
@@ -578,11 +584,18 @@ def _install_update_bg():
     latest = mcp_u["latest_version"]
     highlights = mcp_u.get("highlights", [])
     hl_text = ("\n" + "\n".join(f"   • {h}" for h in highlights[:5])) if highlights else ""
+    has_silent_download = bool(mcp_u.get("download_url") and mcp_u.get("sha256"))
 
     msg = (
         f"Current version: v{mcp_ver}\n"
         f"New version:     v{latest}"
         f"{hl_text}\n\n"
+    )
+    msg += (
+        "LocalLens Agent will download and install this update in the\n"
+        "background, then restart automatically.\n\n"
+        "Proceed with the update?"
+        if has_silent_download else
         "The download page will open in your browser.\n"
         "Replace the existing app with the new one after downloading.\n\n"
         "Proceed with the update?"
@@ -590,13 +603,46 @@ def _install_update_bg():
     if not _confirm(f"Install MCP Update v{latest}", msg):
         return
 
-    result = install_mcp_update(
-        latest_version=latest,
-        release_notes_url=mcp_u.get("release_notes_url", ""),
-        upgrade_command=mcp_u.get("upgrade_command", ""),
-    )
+    if has_silent_download:
+        _update_download_pct = 0
 
-    if result.get("method") == "pip":
+        def _progress(downloaded, total):
+            global _update_download_pct
+            _update_download_pct = int(downloaded * 100 / total) if total else 0
+
+        result = install_mcp_update(
+            latest_version=latest,
+            release_notes_url=mcp_u.get("release_notes_url", ""),
+            upgrade_command=mcp_u.get("upgrade_command", ""),
+            download_url=mcp_u.get("download_url", ""),
+            sha256=mcp_u.get("sha256", ""),
+            progress_cb=_progress,
+        )
+        _update_download_pct = None
+    else:
+        result = install_mcp_update(
+            latest_version=latest,
+            release_notes_url=mcp_u.get("release_notes_url", ""),
+            upgrade_command=mcp_u.get("upgrade_command", ""),
+        )
+
+    if result.get("method") == "silent":
+        if result.get("success"):
+            if not result.get("restart_required"):
+                _msg_box(
+                    "Update Installed  ✓",
+                    f"LocalLens MCP has been updated to v{latest}."
+                )
+            # restart_required is False on Windows — the installer already
+            # terminated this process and relaunched the new one.
+        else:
+            _msg_box(
+                "Update Failed",
+                f"Could not install v{latest}:\n\n{result.get('error', 'Unknown error')}\n\n"
+                "Try updating manually from the releases page.",
+                MB_OK | MB_ICONWARNING,
+            )
+    elif result.get("method") == "pip":
         if result.get("success"):
             _msg_box(
                 "Update Installed  ✓",
@@ -611,6 +657,7 @@ def _install_update_bg():
                 "Try updating manually from the releases page.",
                 MB_OK | MB_ICONWARNING,
             )
+    # method == "browser": releases page already opened — no extra alert needed
 
 
 def on_install_update(icon, item):

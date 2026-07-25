@@ -276,6 +276,63 @@ jobs:
   #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   # ─────────────────────────────────────────────────────────────────────────────
 
+  update-version-manifest:
+    name: Update version.json with download checksums
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [build-tray-mac, build-tray-win]
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Fetch asset digests from the release
+        # GitHub computes and stores a SHA256 digest for every uploaded asset —
+        # no need to re-download multi-hundred-MB binaries just to hash them.
+        id: digests
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MAC_ASSET="locallens-agent-${{ github.ref_name }}-macos-arm64.dmg"
+          WIN_ASSET="locallens-agent-${{ github.ref_name }}-windows-x86_64-setup.exe"
+
+          MAC_SHA=$(gh release view ${{ github.ref_name }} --json assets \
+            --jq ".assets[] | select(.name == \"$MAC_ASSET\") | .digest" | sed 's/^sha256://')
+          WIN_SHA=$(gh release view ${{ github.ref_name }} --json assets \
+            --jq ".assets[] | select(.name == \"$WIN_ASSET\") | .digest" | sed 's/^sha256://')
+
+          if [ -z "$MAC_SHA" ] || [ -z "$WIN_SHA" ]; then
+            echo "::error::Could not resolve asset digest(s) — mac='$MAC_SHA' win='$WIN_SHA'"
+            exit 1
+          fi
+
+          echo "mac_asset=$MAC_ASSET" >> $GITHUB_OUTPUT
+          echo "win_asset=$WIN_ASSET" >> $GITHUB_OUTPUT
+          echo "mac_sha256=$MAC_SHA" >> $GITHUB_OUTPUT
+          echo "win_sha256=$WIN_SHA" >> $GITHUB_OUTPUT
+
+      - name: Update version.json
+        run: |
+          REPO_URL="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}"
+          jq --arg macUrl "$REPO_URL/${{ steps.digests.outputs.mac_asset }}" \
+             --arg macSha "${{ steps.digests.outputs.mac_sha256 }}" \
+             --arg winUrl "$REPO_URL/${{ steps.digests.outputs.win_asset }}" \
+             --arg winSha "${{ steps.digests.outputs.win_sha256 }}" \
+             '.mcp.downloads = {
+                "macos-arm64": {"url": $macUrl, "sha256": $macSha},
+                "windows-x86_64": {"url": $winUrl, "sha256": $winSha}
+              }' version.json > version.json.tmp
+          mv version.json.tmp version.json
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add version.json
+          git commit -m "chore: update version.json downloads for ${{ github.ref_name }}"
+          git push origin HEAD:main
+
   update-homebrew-cask:
     name: Update Homebrew Cask
     runs-on: ubuntu-latest

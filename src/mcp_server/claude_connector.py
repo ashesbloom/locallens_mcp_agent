@@ -274,10 +274,17 @@ def get_mcp_command_config() -> Dict[str, Any]:
 
     # ── PyInstaller / Briefcase bundle ─────────────────────────────────────────
     if method == "bundled":
-        # The MCP binary should live alongside the app executable.
-        app_dir = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
         binary_name = "locallens-mcp.exe" if sys.platform == "win32" else "locallens-mcp"
-        mcp_binary = app_dir / binary_name
+
+        # If this frozen exe IS the MCP binary, use it directly.
+        exe_path = Path(sys.executable)
+        if exe_path.stem.lower() == "locallens-mcp":
+            _log.debug(f"bundled: running exe IS the MCP binary: {exe_path}")
+            return {"command": str(exe_path), "args": [], "env": env_block}
+
+        # Otherwise look next to the running exe (e.g. tray app + sibling MCP binary).
+        # Never use sys._MEIPASS — that's PyInstaller's temp extraction dir.
+        mcp_binary = exe_path.parent / binary_name
 
         if not mcp_binary.exists():
             # Fallback: check install_dir.txt → LocalLens backend venv

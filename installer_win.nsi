@@ -17,6 +17,12 @@ Page directory
 Page instfiles
 
 Section "Install"
+    ; Close a running instance so its files aren't locked — required for the
+    ; in-app silent updater (tray/actions.py _install_windows_update), which
+    ; launches this installer with /S while the old tray process is still up.
+    ExecWait 'taskkill /F /IM "${APP_EXE}" /T'
+    Sleep 500
+
     SetOutPath "$INSTDIR"
     ; Copy everything PyInstaller put in dist\LocalLens Agent\
     ; Use * not *.* — the Windows *.* glob skips extension-less files
@@ -39,6 +45,11 @@ Section "Install"
     ; Auto-start with Windows (tray app)
     WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" \
         "LocalLensAgent" '"$INSTDIR\${APP_EXE}"'
+
+    ; Relaunch after install — needed so the silent /S update path (which
+    ; killed the old instance above) leaves the user with the app running,
+    ; not just autostarted on next login.
+    Exec '"$INSTDIR\${APP_EXE}"'
 SectionEnd
 
 Section "Uninstall"

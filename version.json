@@ -1,9 +1,19 @@
 {
   "mcp": {
-    "latest": "1.0.19",
+    "latest": "1.0.20",
     "min_supported": "1.0.0",
     "release_notes_url": "https://github.com/ashesbloom/locallens_mcp_agent/releases/latest",
+    "downloads": {},
     "changelog": [
+      {
+        "version": "1.0.20",
+        "date": "July 2026",
+        "highlights": [
+          "Fixed Claude Desktop setup PATH for frozen/bundled builds",
+          "Added silent in-app auto-updater with SHA256 verification and progress UI",
+          "Fixed Windows backend console window visibility (STARTUPINFO/SW_HIDE defense-in-depth)"
+        ]
+      },
       {
         "version": "1.0.19",
         "date": "July 2026",

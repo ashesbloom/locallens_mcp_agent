@@ -120,24 +120,46 @@ def get_current_app_info() -> dict:
     }
 
 
-def install_mcp_update(latest_version: str, release_notes_url: str, upgrade_command: str) -> dict:
+def install_mcp_update(
+    latest_version: str,
+    release_notes_url: str,
+    upgrade_command: str,
+    download_url: str = "",
+    sha256: str = "",
+    progress_cb=None,
+) -> dict:
     """
-    Attempt to install an MCP update.
+    Attempt to install an MCP + tray update.
 
-    For frozen builds (py2app / PyInstaller): opens the releases page in the
-    browser — the user downloads the new DMG/zip and replaces the app.
-    Silent in-place replacement requires a signed updater (future: Sparkle).
+    For frozen builds (py2app / PyInstaller): if the manifest has a signed
+    download URL + checksum for this platform (populated by CI on release —
+    see .github/workflows/release.yml), downloads it, verifies the SHA256,
+    and installs it silently in the background. Falls back to opening the
+    releases page in the browser if that info is missing (e.g. the release
+    predates the auto-updater) or the download/verify/install step fails.
 
     For pip installs (developer / source): runs `pip install --upgrade
     locallens-mcp` in a subprocess and returns the result.
 
-    Returns {"method": "browser"|"pip", "success": bool, ...}. Never raises.
+    progress_cb(downloaded_bytes, total_bytes), if given, is called from the
+    calling thread during download — safe to use for a "Downloading… NN%"
+    menu title update. Never raises.
+
+    Returns {"method": "silent"|"browser"|"pip", "success": bool, ...}.
     """
     import sys as _sys
     url = release_notes_url or "https://github.com/ashesbloom/locallens_mcp_agent/releases/latest"
 
     if getattr(_sys, "frozen", False):
-        # Running as a bundled .app — open the releases page, user installs manually
+        if download_url and sha256:
+            result = _download_and_install(download_url, sha256, progress_cb)
+            if result is not None:
+                return result
+            # None = download/verify failed (e.g. offline) — fall back below
+            # rather than leaving the user with no path forward.
+
+        # No signed download info yet, or the silent path failed — open the
+        # releases page, user installs manually.
         open_url(url)
         return {"method": "browser", "success": True, "url": url}
 
@@ -161,6 +183,109 @@ def install_mcp_update(latest_version: str, release_notes_url: str, upgrade_comm
     except Exception as exc:
         return {"method": "pip", "success": False, "error": str(exc)}
 
+
+def _download_and_install(download_url: str, sha256_expected: str, progress_cb=None):
+    """
+    Download the platform installer/DMG, verify its SHA256, and install it
+    silently. Returns a result dict on a definitive outcome (success or a
+    real install failure), or None to tell the caller "give up on the silent
+    path, fall back to the browser" (network error, checksum mismatch).
+    """
+    import hashlib
+    import tempfile
+    import httpx
+
+    suffix = Path(download_url).suffix or ".bin"
+    tmp_path = Path(tempfile.gettempdir()) / f"locallens-update{suffix}"
+
+    try:
+        hasher = hashlib.sha256()
+        with httpx.stream("GET", download_url, timeout=60, follow_redirects=True) as resp:
+            resp.raise_for_status()
+            total = int(resp.headers.get("content-length", 0))
+            downloaded = 0
+            with open(tmp_path, "wb") as f:
+                for chunk in resp.iter_bytes(chunk_size=256 * 1024):
+                    f.write(chunk)
+                    hasher.update(chunk)
+                    downloaded += len(chunk)
+                    if progress_cb:
+                        try:
+                            progress_cb(downloaded, total)
+                        except Exception:
+                            pass
+
+        if hasher.hexdigest().lower() != sha256_expected.lower():
+            tmp_path.unlink(missing_ok=True)
+            print("[LocalLens] Update checksum mismatch — falling back to browser")
+            return None
+    except Exception as exc:
+        print(f"[LocalLens] Update download failed ({exc}) — falling back to browser")
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        return None
+
+    try:
+        if sys.platform == "win32":
+            _install_windows_update(tmp_path)
+            return {"method": "silent", "success": True, "restart_required": False}
+        else:
+            _install_macos_update(tmp_path)
+            return {"method": "silent", "success": True, "restart_required": True}
+    except Exception as exc:
+        return {"method": "silent", "success": False, "error": str(exc)}
+
+
+def _install_windows_update(installer_path: Path):
+    """
+    Launch the NSIS installer silently (/S). It taskkills the running tray
+    exe, overwrites the install dir, and re-registers the autostart entry
+    (see installer_win.nsi) — the OS terminates this process mid-install,
+    so there's nothing further to do here.
+    """
+    si = subprocess.STARTUPINFO()
+    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    si.wShowWindow = 0  # SW_HIDE
+    subprocess.Popen(
+        [str(installer_path), "/S"],
+        creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW,
+        startupinfo=si,
+    )
+
+
+def _install_macos_update(dmg_path: Path):
+    """
+    Mount the downloaded DMG, replace /Applications/<App>.app, unmount, and
+    launch the new app. The caller (tray_mac.py) is responsible for quitting
+    the current (old) process afterwards — this function only swaps files.
+    """
+    import shutil as _shutil
+    import tempfile
+
+    mount_point = Path(tempfile.mkdtemp(prefix="locallens_update_"))
+    try:
+        subprocess.run(
+            ["hdiutil", "attach", str(dmg_path), "-nobrowse", "-quiet", "-mountpoint", str(mount_point)],
+            check=True, capture_output=True, text=True, timeout=60,
+        )
+        app_src = next(mount_point.glob("*.app"), None)
+        if not app_src:
+            raise RuntimeError("No .app bundle found inside the downloaded DMG")
+
+        app_dst = Path("/Applications") / app_src.name
+        if app_dst.exists():
+            _shutil.rmtree(app_dst, ignore_errors=True)
+        subprocess.run(
+            ["ditto", str(app_src), str(app_dst)],
+            check=True, capture_output=True, text=True, timeout=120,
+        )
+    finally:
+        subprocess.run(["hdiutil", "detach", str(mount_point), "-quiet"], capture_output=True)
+        _shutil.rmtree(mount_point, ignore_errors=True)
+
+    subprocess.Popen(["open", "-a", str(app_dst)])
 
 
 def open_url(url: str):
@@ -375,12 +500,16 @@ def start_locallens():
             stderr_log = Path(tempfile.gettempdir()) / "locallens_backend_start.log"
             with open(stderr_log, "w") as err_fh:
                 if sys.platform == "win32":
+                    si = subprocess.STARTUPINFO()
+                    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                    si.wShowWindow = 0  # SW_HIDE
                     proc = subprocess.Popen(
                         [str(backend_exe)],
                         stdin=subprocess.DEVNULL,
                         stdout=subprocess.DEVNULL,
                         stderr=err_fh,
                         creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW,
+                        startupinfo=si,
                     )
                 else:
                     proc = subprocess.Popen(
@@ -434,6 +563,16 @@ def start_locallens():
             python_exe = install_dir / "venv" / "bin" / "python"
 
         if not python_exe.exists():
+            if getattr(sys, "frozen", False):
+                # Frozen tray EXE is NOT a Python interpreter — can't use it
+                print(f"[LocalLens] venv python not found at {python_exe} and running frozen — cannot fall back to sys.executable")
+                _show_alert(
+                    "Error Starting LocalLens",
+                    f"Python interpreter not found at:\n{python_exe}\n\n"
+                    "The LocalLens backend venv may be missing or corrupted.\n"
+                    "Please reinstall LocalLens."
+                )
+                return False
             print(f"[LocalLens] venv python not found at {python_exe}, using sys.executable")
             python_exe = Path(sys.executable)
 
@@ -472,6 +611,9 @@ def start_locallens():
 
         with open(stderr_log, "w") as err_fh:
             if sys.platform == "win32":
+                si = subprocess.STARTUPINFO()
+                si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                si.wShowWindow = 0  # SW_HIDE
                 subprocess.Popen(
                     [str(python_exe), str(main_script)],
                     cwd=str(install_dir),
@@ -479,7 +621,8 @@ def start_locallens():
                     stdout=subprocess.DEVNULL,
                     stderr=err_fh,
                     env=clean_env,
-                    creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
+                    creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW,
+                    startupinfo=si,
                 )
             else:
                 subprocess.Popen(

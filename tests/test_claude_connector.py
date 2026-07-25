@@ -637,31 +637,63 @@ class TestBundledInstallMethod:
         assert str(zip_path) in path_parts, "zip missing from PYTHONPATH"
         assert str(dynload_dir) in path_parts, "lib-dynload missing from PYTHONPATH"
 
-    def test_pyinstaller_bundle_uses_meipass_binary(self, tmp_path):
+    def test_pyinstaller_bundle_uses_exe_parent_not_meipass(self, tmp_path):
         """
-        When sys.frozen == True and sys._MEIPASS is set, get_mcp_command_config()
-        must resolve the MCP binary from sys._MEIPASS (the extraction temp dir
-        where PyInstaller unpacks the bundle at runtime).
+        When sys.frozen == True, get_mcp_command_config() must resolve the MCP
+        binary next to sys.executable (the real install dir), NOT from
+        sys._MEIPASS (PyInstaller's temp extraction dir).
         """
         import sys as _sys
 
-        fake_meipass = tmp_path / "meipass"
-        fake_meipass.mkdir()
+        exe_dir = tmp_path / "install"
+        exe_dir.mkdir()
+        fake_exe = exe_dir / ("LocalLens Agent.exe" if _sys.platform == "win32" else "LocalLens Agent")
+        fake_exe.write_text("fake exe")
 
         binary_name = "locallens-mcp.exe" if _sys.platform == "win32" else "locallens-mcp"
-        fake_binary = fake_meipass / binary_name
+        fake_binary = exe_dir / binary_name
         fake_binary.write_text("#!/bin/sh\necho fake\n")
         fake_binary.chmod(0o755)
+
+        # _MEIPASS is a DIFFERENT dir — must NOT be used
+        fake_meipass = tmp_path / "meipass"
+        fake_meipass.mkdir()
 
         with (
             patch.object(_sys, "frozen", True, create=True),
             patch.object(_sys, "_MEIPASS", str(fake_meipass), create=True),
+            patch.object(_sys, "executable", str(fake_exe)),
         ):
             method = detect_install_method()
             cfg = get_mcp_command_config()
 
         assert method == "bundled", f"Expected bundled, got {method!r}"
         assert cfg["command"] == str(fake_binary)
+        assert cfg["args"] == []
+
+    def test_pyinstaller_self_detection_when_exe_is_mcp(self, tmp_path):
+        """
+        When the running frozen executable IS locallens-mcp itself,
+        get_mcp_command_config() should return sys.executable directly.
+        """
+        import sys as _sys
+
+        exe_dir = tmp_path / "install"
+        exe_dir.mkdir()
+        binary_name = "locallens-mcp.exe" if _sys.platform == "win32" else "locallens-mcp"
+        fake_exe = exe_dir / binary_name
+        fake_exe.write_text("fake exe")
+
+        with (
+            patch.object(_sys, "frozen", True, create=True),
+            patch.object(_sys, "_MEIPASS", str(tmp_path / "meipass"), create=True),
+            patch.object(_sys, "executable", str(fake_exe)),
+        ):
+            method = detect_install_method()
+            cfg = get_mcp_command_config()
+
+        assert method == "bundled"
+        assert cfg["command"] == str(fake_exe)
         assert cfg["args"] == []
 
 
