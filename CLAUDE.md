@@ -76,6 +76,10 @@ src/
 tests/
   test_claude_connector.py     # 573 lines, comprehensive unit tests for connector
 
+docs/                          # Testing & installation documentation, example configs
+scripts/                       # Release automation scripts (set_version.py / set_version.js)
+release_notes/                 # Historical GitHub release notes markdown files
+
 locallens_mcp_entrypoint.py    # PyInstaller entrypoint (frozen binary)
 locallens_tray_entrypoint.py   # PyInstaller entrypoint for tray app
 ```

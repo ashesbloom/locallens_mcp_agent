@@ -423,7 +423,11 @@ class TestInstallClaudeConnector:
     def test_creates_config_dir_when_missing(self, tmp_path):
         """If Claude Desktop dir doesn't exist, create it and proceed."""
         missing = tmp_path / "NoClaudeDir" / "claude_desktop_config.json"
-        with _patch_config_path(missing):
+        with (
+            _patch_config_path(missing),
+            patch("mcp_server.claude_connector.verify_mcp_binary",
+                  return_value={"valid": True, "command": "locallens-mcp"}),
+        ):
             result = install_claude_connector()
 
         assert result["status"] == "installed"

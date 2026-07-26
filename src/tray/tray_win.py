@@ -100,7 +100,11 @@ def _is_pid_alive(pid: int) -> bool:
     try:
         import psutil
         proc = psutil.Process(pid)
-        return proc.status() not in (psutil.STATUS_ZOMBIE, psutil.STATUS_DEAD)
+        # psutil.STATUS_DEAD is not a guaranteed constant on all platforms/versions.
+        # On Windows, dead processes raise NoSuchProcess (caught by except below).
+        # psutil.STATUS_ZOMBIE exists on all platforms but Windows processes
+        # never enter zombie state — they're just gone.
+        return proc.status() != psutil.STATUS_ZOMBIE
     except Exception:
         return False
 

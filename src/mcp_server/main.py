@@ -58,6 +58,12 @@ MANDATORY WORKFLOW before ANY sort/find action:
 - primary_sort must be "Date", "Location", or "People" — NEVER "Faces"
 - For start_find_group: if user says "put in /a/b/c" → destination_folder="/a/b", folder_name="c"
 
+⚠️ PEOPLE SORT GUARD:
+- If analyse_folder returns people: [] AND user requests primary_sort="People"
+  → DO NOT proceed. Tell user: "No faces are enrolled. Say 'enroll [name]' to add someone first."
+- The start_sorting tool will also BLOCK People sort if no faces are enrolled.
+- Suggest Date or Location sort as alternatives.
+
 After tool calls complete, the response may include a "next_actions" array — present these as natural follow-up options.
 
 📂 OPEN FOLDER:

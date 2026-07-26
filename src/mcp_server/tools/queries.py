@@ -124,7 +124,9 @@ def register_queries(mcp: FastMCP):
         CRITICAL BEHAVIOR FOR LLMs:
         - If subfolders is non-empty → ALWAYS present the list and ask user which to ignore before sorting
         - If subfolders is empty → just proceed, don't ask about ignore_list
-        - If people is empty → warn: People sort will put everything in No_Faces_Found/
+        - If people is empty → BLOCK People sort. Tell user: "No faces enrolled. Enroll someone first
+          or try Date/Location sort." DO NOT proceed with primary_sort="People" — it wastes time
+          and dumps everything into a single No_Faces_Found/ folder.
         - If locations is empty → warn: Location sort will put everything in Unknown_Location/
         - Use subfolders[].path values directly as entries in ignore_list for start_sorting
         """

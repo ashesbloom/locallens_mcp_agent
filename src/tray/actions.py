@@ -320,8 +320,9 @@ CLAUDE_INSTRUCTIONS_HOWTO = (
 def copy_to_clipboard(text: str) -> bool:
     """
     Copy text to the system clipboard.
-    macOS: pbcopy. Windows: clip.exe. Returns True on success, False if the
-    clipboard utility isn't available or the copy failed for any reason.
+    macOS: pbcopy (UTF-8). Windows: clip.exe (UTF-16LE).
+    Returns True on success, False if the clipboard utility isn't available
+    or the copy failed for any reason.
     """
     try:
         if sys.platform == "darwin":
@@ -329,8 +330,10 @@ def copy_to_clipboard(text: str) -> bool:
             proc.communicate(text.encode("utf-8"))
             return proc.returncode == 0
         elif sys.platform == "win32":
+            # clip.exe expects UTF-16LE — passing UTF-8 corrupts non-ASCII
+            # characters like em-dashes, arrows, and curly quotes.
             proc = subprocess.Popen(["clip"], stdin=subprocess.PIPE)
-            proc.communicate(text.encode("utf-8"))
+            proc.communicate(text.encode("utf-16-le"))
             return proc.returncode == 0
     except Exception:
         pass
@@ -784,17 +787,30 @@ def stop_locallens_backend(pid: int) -> bool:
         return True  # Already gone — that's fine
 
     except ImportError:
-        # psutil not available — kill the entire process group
-        # (start_new_session=True makes the child a session/group leader
-        # so its pgid == its pid, and os.killpg kills all workers too)
-        try:
-            pgid = os.getpgid(pid)
-            os.kill(pgid * -1, signal.SIGTERM)  # negative pid = kill group
-            return True
-        except ProcessLookupError:
-            return True
-        except Exception:
-            return False
+        # psutil not available — platform-specific fallback
+        if sys.platform == "win32":
+            # Windows: os.getpgid() doesn't exist and os.kill() semantics differ.
+            # Use taskkill /T to kill the process tree (equivalent to POSIX killpg).
+            try:
+                subprocess.run(
+                    ["taskkill", "/PID", str(pid), "/T", "/F"],
+                    capture_output=True, timeout=10,
+                )
+                return True
+            except Exception:
+                return False
+        else:
+            # POSIX: kill the entire process group
+            # (start_new_session=True makes the child a session/group leader
+            # so its pgid == its pid, and os.killpg kills all workers too)
+            try:
+                pgid = os.getpgid(pid)
+                os.kill(pgid * -1, signal.SIGTERM)  # negative pid = kill group
+                return True
+            except ProcessLookupError:
+                return True
+            except Exception:
+                return False
 
     except Exception as e:
         _show_alert("Error Stopping LocalLens", str(e))
@@ -859,11 +875,19 @@ def stop_all_backends() -> bool:
         return True
 
     except ImportError:
-        # psutil not available — try os.kill on each PID
+        # psutil not available — platform-specific fallback
         from .status import find_backend_pids
         for pid in find_backend_pids():
             try:
-                os.kill(pid, signal.SIGTERM)
+                if sys.platform == "win32":
+                    # Windows: os.kill + SIGTERM has unpredictable semantics.
+                    # taskkill /T /F cleanly terminates the process tree.
+                    subprocess.run(
+                        ["taskkill", "/PID", str(pid), "/T", "/F"],
+                        capture_output=True, timeout=10,
+                    )
+                else:
+                    os.kill(pid, signal.SIGTERM)
             except (ProcessLookupError, PermissionError):
                 pass
         return True
@@ -947,7 +971,31 @@ def show_claude_status_terminal():
             script = 'tell application "Terminal" to do script "tail -f ~/Library/Logs/Claude/mcp*.log"'
             subprocess.Popen(["osascript", "-e", script])
         elif sys.platform == "win32":
-            subprocess.Popen(["powershell", "-Command", "Start-Process powershell -ArgumentList '-NoExit -Command Get-Content -Path $env:APPDATA\\Claude\\logs\\mcp*.log -Tail 100 -Wait'"])
+            # Claude Desktop on Windows can be installed two ways:
+            #   1. MSIX (Windows Store) — logs in %LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\logs\
+            #   2. Standalone EXE       — logs in %APPDATA%\Claude\logs\
+            # Probe for the MSIX path first (same logic as claude_connector.py).
+            log_path = None
+            local_appdata = os.environ.get("LOCALAPPDATA", "")
+            if local_appdata:
+                packages_dir = Path(local_appdata) / "Packages"
+                if packages_dir.is_dir():
+                    for pkg_dir in packages_dir.glob("Claude_*"):
+                        if pkg_dir.is_dir():
+                            msix_logs = pkg_dir / "LocalCache" / "Roaming" / "Claude" / "logs"
+                            if msix_logs.is_dir():
+                                log_path = str(msix_logs)
+                                break
+            if not log_path:
+                # Fallback to standalone install path
+                log_path = os.path.join(os.environ.get("APPDATA", ""), "Claude", "logs")
+
+            # Escape backslashes for PowerShell
+            ps_path = log_path.replace("\\", "\\\\")
+            subprocess.Popen([
+                "powershell", "-Command",
+                f"Start-Process powershell -ArgumentList '-NoExit -Command Get-Content -Path \"{ps_path}\\mcp*.log\" -Tail 100 -Wait'"
+            ])
     except Exception as e:
         _show_alert("Error opening terminal", str(e))
 

@@ -10,18 +10,18 @@ When performing a release, version bump, commit, or tag operation, the agent MUS
 1. **Run Unit Tests**: Always execute `venv/bin/pytest tests/` and verify all tests pass before making any version changes or release commits.
 2. **Inspect Working Directory**: Check `git status --short` to ensure all necessary source changes are accounted for.
 
-### Version Management with `set_version.js`
-1. Always run `node set_version.js <version> ["Highlight 1"] ["Highlight 2"] ...` to bump version numbers consistently across the codebase.
-2. `set_version.js` automatically updates:
+### Version Management with `set_version` tooling
+1. Always run `python scripts/set_version.py <version> ["Highlight 1"] ["Highlight 2"] ...` (or `node scripts/set_version.js <version> ...`) to bump version numbers consistently across the codebase.
+2. The version scripts automatically update:
    - `pyproject.toml` (`version = "<version>"`)
    - `src/mcp_server/updater.py` (`MCP_VERSION = "<version>"`)
    - `version.json` (App GUI Changelog & `mcp.latest` version)
-   - `release_notes_v<VERSION>.md` (GitHub Release Page notes)
+   - `release_notes/release_notes_v<VERSION>.md` (GitHub Release Page notes)
 
 ### Dual Release Notes Requirement
 Every release must produce TWO sets of release notes:
 1. **Application GUI Release Log**: Embedded in `version.json` under `mcp.changelog`. Displayed in the system tray app and update notification dialogs.
-2. **GitHub Release Page Notes**: Formatted markdown in `release_notes_v<VERSION>.md`. Download URLs, asset names, and Gatekeeper commands must match `v<VERSION>`.
+2. **GitHub Release Page Notes**: Formatted markdown in `release_notes/release_notes_v<VERSION>.md`. Download URLs, asset names, and Gatekeeper commands must match `v<VERSION>`.
 
 ### Release Commit & Tagging Protocol
 1. **Commit Message Format**: Use `release: v<VERSION>` or `chore(release): v<VERSION>`.

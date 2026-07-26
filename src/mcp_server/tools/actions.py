@@ -148,7 +148,7 @@ def register_actions(mcp: FastMCP):
         maintain_hierarchy: bool = False,
         ignore_list: Optional[List[str]] = None,
         operation_mode: str = "copy",
-        wait_for_completion: bool = False,
+        wait_for_completion: bool = True,
         poll_interval_s: float = 1.0,
         timeout_s: int = 900
     ) -> Dict[str, Any]:
@@ -166,7 +166,8 @@ def register_actions(mcp: FastMCP):
             → Otherwise default to "balanced"
         - operation_mode: "copy" (DEFAULT — safe) or "move" (destructive — ONLY if user explicitly asks)
         - maintain_hierarchy: False by default (flattens into sort groups). Set True only if user asks.
-        - wait_for_completion: if True, waits and polls until the job finishes before returning
+        - wait_for_completion: ALWAYS True (default). Waits for the job to finish so you can
+          report results. Only set False if you have a specific reason to fire-and-forget.
 
         ⛔ CRITICAL SAFETY RULES FOR LLMs — VIOLATION = DATA LOSS:
         1. NEVER INVENT OR FABRICATE A DESTINATION PATH. Only use:
@@ -179,10 +180,13 @@ def register_actions(mcp: FastMCP):
         3. BEFORE calling this, call analyse_folder() first to check for subfolders.
            If subfolders exist → present them and ask which to ignore.
            If no subfolders → proceed directly.
-        4. This fires a background task. If wait_for_completion is False,
-           you MUST repeatedly call get_job_progress() to report progress.
+        4. wait_for_completion defaults to True. The tool will poll and return the final result.
         5. primary_sort MUST be "Date", "Location", or "People". Code auto-corrects
            "Faces" → "People" but always use the correct value.
+
+        ⚠️ PEOPLE SORT REQUIRES ENROLLED FACES:
+           If primary_sort is "People" but no faces are enrolled, this tool will BLOCK
+           and return an error. Tell the user to enroll faces first using add_face_enroll().
         """
         # --- SAFETY GUARD: Validate source exists ---
         normalized_source = os.path.expanduser(source_folder or "")
@@ -214,6 +218,41 @@ def register_actions(mcp: FastMCP):
         if normalized_sort in {"faces", "face"}:
             primary_sort = "People"
             normalized_sort = "people"
+
+        # --- SAFETY GUARD: People sort requires enrolled faces ---
+        # Without enrolled faces, People sort puts EVERYTHING into "No_Faces_Found/"
+        # which is a waste of the user's time. Block early with a helpful message.
+        if normalized_sort == "people":
+            try:
+                async with httpx.AsyncClient() as check_client:
+                    faces_resp = await check_client.get(
+                        f"{get_locallens_url()}/api/enrolled-faces", timeout=5
+                    )
+                    faces_resp.raise_for_status()
+                    faces_data = faces_resp.json()
+                    enrolled_count = len(faces_data.get("faces", faces_data.get("enrolled", [])))
+                    if enrolled_count == 0:
+                        return {
+                            "error": "no_enrolled_faces",
+                            "message": (
+                                "No faces are enrolled yet. People sort requires at least one "
+                                "enrolled person — otherwise all photos end up in a single "
+                                "'No_Faces_Found' folder. "
+                                "Please enroll faces first using add_face_enroll(), then retry."
+                            ),
+                            "required_action": "enroll_faces",
+                            "guidance": (
+                                "Tell the user: 'No faces are enrolled yet, so a People sort would "
+                                "put all photos into a single No_Faces_Found folder. "
+                                "Would you like to enroll someone first? Just say something like "
+                                "\"add Mom to face recognition\" and provide 3-5 clear photos.' "
+                                "Alternatively, suggest sorting by Date or Location instead."
+                            ),
+                        }
+            except Exception:
+                # If we can't check enrolled faces (e.g. backend not responding),
+                # let the sort proceed — the backend will handle it.
+                pass
 
         payload = {
             "source_folder": normalized_source,
@@ -278,7 +317,7 @@ def register_actions(mcp: FastMCP):
         people: Optional[List[str]] = None,
         face_mode: Optional[str] = "balanced",
         ignore_list: Optional[List[str]] = None,
-        wait_for_completion: bool = False,
+        wait_for_completion: bool = True,
         poll_interval_s: float = 1.0,
         timeout_s: int = 900
     ) -> Dict[str, Any]:

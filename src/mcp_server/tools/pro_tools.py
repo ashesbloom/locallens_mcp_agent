@@ -105,10 +105,25 @@ async def _launch_daemon_silent() -> str:
     if pid_file.exists():
         try:
             pid = int(pid_file.read_text().strip())
-            os.kill(pid, 0)  # 0 = just check existence
-            return "already_running"
+            # Check if process is still alive — platform-safe
+            if sys.platform == "win32":
+                # os.kill(pid, 0) crashes on Windows (signal 0 not supported).
+                # Use the Win32 API: OpenProcess returns a handle if alive.
+                import ctypes
+                PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+                handle = ctypes.windll.kernel32.OpenProcess(
+                    PROCESS_QUERY_LIMITED_INFORMATION, False, pid
+                )
+                if handle:
+                    ctypes.windll.kernel32.CloseHandle(handle)
+                    return "already_running"
+                # handle == 0 means process doesn't exist — fall through to cleanup
+            else:
+                os.kill(pid, 0)  # POSIX: signal 0 = check existence
+                return "already_running"
         except (OSError, ValueError):
-            pid_file.unlink(missing_ok=True)
+            pass
+        pid_file.unlink(missing_ok=True)
 
     # Resolve the correct python executable for the backend venv
     if sys.platform == "win32":

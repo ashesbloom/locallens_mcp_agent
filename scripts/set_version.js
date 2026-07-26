@@ -36,7 +36,7 @@ if (highlights.length === 0) {
   highlights.push(`LocalLens MCP Agent v${version} release.`);
 }
 
-const rootDir = __dirname;
+const rootDir = path.join(__dirname, '..');
 const monthYear = new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
 
 console.log(`\n🚀 Preparing Release v${version} (${monthYear})\n`);
@@ -89,8 +89,8 @@ if (fs.existsSync(versionJsonPath)) {
   console.warn(` ⚠️ version.json not found at ${versionJsonPath}`);
 }
 
-// 4. Generate release_notes_v<VERSION>.md (GitHub Release Page Notes)
-const templatePath = path.join(rootDir, 'release_notes_template.md');
+// 4. Generate release_notes/release_notes_v<VERSION>.md (GitHub Release Page Notes)
+const templatePath = path.join(rootDir, 'release_notes', 'release_notes_template.md');
 if (fs.existsSync(templatePath)) {
   let template = fs.readFileSync(templatePath, 'utf8');
 
@@ -113,9 +113,9 @@ if (fs.existsSync(templatePath)) {
   }
 
   const releaseNotesFileName = `release_notes_v${version}.md`;
-  const releaseNotesPath = path.join(rootDir, releaseNotesFileName);
+  const releaseNotesPath = path.join(rootDir, 'release_notes', releaseNotesFileName);
   fs.writeFileSync(releaseNotesPath, ghReleaseNotes, 'utf8');
-  console.log(` ✅ Generated ${releaseNotesFileName} (GitHub Release Page Notes)`);
+  console.log(` ✅ Generated release_notes/${releaseNotesFileName} (GitHub Release Page Notes)`);
 } else {
   console.warn(` ⚠️ release_notes_template.md not found at ${templatePath}`);
 }

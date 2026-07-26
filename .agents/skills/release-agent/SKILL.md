@@ -16,23 +16,24 @@ venv/bin/pytest tests/
 ```
 
 ### Step 2: Bump Version & Generate Dual Release Notes
-Use the `set_version.js` automation tool to synchronize all version fields and generate both release logs:
+Use the `set_version.py` (or `set_version.js`) automation tool in `scripts/` to synchronize all version fields and generate both release logs:
 ```bash
-node set_version.js <version> "Highlight 1" "Highlight 2" ...
+python scripts/set_version.py <version> "Highlight 1" "Highlight 2" ...
 ```
+(or `node scripts/set_version.js <version> "Highlight 1" ...` if Node.js is installed)
 
 This updates:
 1. `pyproject.toml` (`version`)
 2. `src/mcp_server/updater.py` (`MCP_VERSION`)
 3. `version.json` (App GUI Release Log / Changelog)
-4. `release_notes_v<version>.md` (GitHub Release Page Notes)
+4. `release_notes/release_notes_v<version>.md` (GitHub Release Page Notes)
 
 ### Step 3: Review Changes
 Verify modified files with `git status` and `git diff`:
 - `pyproject.toml`
 - `src/mcp_server/updater.py`
 - `version.json`
-- `release_notes_v<version>.md`
+- `release_notes/release_notes_v<version>.md`
 
 ### Step 4: Commit Changes
 Create a standard release commit:
