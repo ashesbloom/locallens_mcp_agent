@@ -1,6 +1,6 @@
 {
   "mcp": {
-    "latest": "1.0.26",
+    "latest": "1.0.27",
     "min_supported": "1.0.0",
     "release_notes_url": "https://github.com/ashesbloom/locallens_mcp_agent/releases/latest",
     "downloads": {
@@ -14,6 +14,15 @@
       }
     },
     "changelog": [
+      {
+        "version": "1.0.27",
+        "date": "July 2026",
+        "highlights": [
+          "Status indicators now render correctly on Windows \u2014 shape-coded instead of color emoji",
+          "Connection errors and available updates get their own indicator instead of looking idle",
+          "Rewritten status legend in Help & Getting Started"
+        ]
+      },
       {
         "version": "1.0.26",
         "date": "July 2026",

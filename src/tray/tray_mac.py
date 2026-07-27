@@ -10,6 +10,7 @@ from .actions import (
     check_updates_now, open_url, copy_to_clipboard,
     get_current_app_info, install_mcp_update, format_download_progress,
     CLAUDE_CUSTOM_INSTRUCTIONS, CLAUDE_INSTRUCTIONS_HOWTO,
+    STATUS_OFF, STATUS_STARTING, STATUS_ON, STATUS_EXTERNAL, STATUS_ALERT,
 )
 
 # Claude Status now reflects whether LocalLens is actually registered as an
@@ -124,16 +125,12 @@ def _update_check_loop():
         time.sleep(_UPDATE_CHECK_INTERVAL_SECONDS)
 
 
-# Status indicators — all four are drawn from the same Unicode "large circle"
-# family (introduced together in Emoji 12, 2019) so they render at a
-# consistent size/weight on Apple Color Emoji.
-STATUS_OFF = "🔴"        # not running / not connected
-STATUS_STARTING = "🟡"   # transient: starting backend or connecting to Claude
-STATUS_ON = "🟢"         # running / connected
-STATUS_EXTERNAL = "🔵"   # running, but owned by the LocalLens desktop app
+# Status indicators live in actions.py — both trays and the help legend share
+# one source of truth. See the STATUS_* block there for why they are geometric
+# shapes rather than emoji.
 
 # Whether a Claude connect/disconnect action is currently in flight — drives
-# the transient 🟡 "Connecting…" state on the Claude Status row.
+# the transient ◎ "Connecting…" state on the Claude Status row.
 _claude_action_in_progress = False
 
 
@@ -278,7 +275,7 @@ class LocalLensAgentApp(rumps.App):
         elif not _cached_claude_connected:
             self.btn_claude_status.title = self._claude_title(STATUS_OFF, "Not Connected")
         elif not _cached_claude_binary_valid:
-            self.btn_claude_status.title = self._claude_title(STATUS_OFF, "Connection Error")
+            self.btn_claude_status.title = self._claude_title(STATUS_ALERT, "Connection Error")
         else:
             self.btn_claude_status.title = self._claude_title(STATUS_ON, "Connected")
 
@@ -338,7 +335,7 @@ class LocalLensAgentApp(rumps.App):
             parts.append(f"MCP v{mcp_u['latest_version']}")
         if app_u:
             parts.append(f"App v{app_u['latest_version']}")
-        self.btn_updates.title = self._updates_title(STATUS_STARTING, "Available — " + ", ".join(parts))
+        self.btn_updates.title = self._updates_title(STATUS_ALERT, "Available — " + ", ".join(parts))
 
     def on_check_updates(self, sender):
         global _cached_update_info

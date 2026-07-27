@@ -30,15 +30,8 @@ from .actions import (
     check_updates_now, open_url, copy_to_clipboard,
     get_current_app_info, install_mcp_update, format_download_progress,
     CLAUDE_CUSTOM_INSTRUCTIONS, CLAUDE_INSTRUCTIONS_HOWTO,
+    STATUS_OFF, STATUS_STARTING, STATUS_ON, STATUS_EXTERNAL, STATUS_ALERT,
 )
-
-
-# ── Status indicators ────────────────────────────────────────────────────────
-# Matching the Mac tray exactly: four Unicode large-circle emoji
-STATUS_OFF = "🔴"          # not running / not connected
-STATUS_STARTING = "🟡"     # transient: starting / connecting / stopping
-STATUS_ON = "🟢"           # running / connected
-STATUS_EXTERNAL = "🔵"     # running, but owned by the LocalLens desktop app
 
 
 # ── Cached state (written by background threads, read by menu text fns) ──────
@@ -49,7 +42,7 @@ _cached_app_running = False
 _managed_ll_pids: list = []
 _stop_event = threading.Event()
 
-# Transient action states — drive the 🟡 indicators
+# Transient action states — drive the ◎ "working" indicators
 _claude_action_in_progress = False
 _ll_starting = False
 _ll_stopping = False
@@ -248,7 +241,7 @@ def _claude_title(_item=None):
     if not _cached_claude_connected:
         return f"{STATUS_OFF}  Claude — Not Connected"
     if not _cached_claude_binary_valid:
-        return f"{STATUS_OFF}  Claude — Connection Error"
+        return f"{STATUS_ALERT}  Claude — Connection Error"
     return f"{STATUS_ON}  Claude — Connected"
 
 
@@ -274,7 +267,7 @@ def _updates_title(_item=None):
         parts.append(f"MCP v{mcp_u['latest_version']}")
     if app_u:
         parts.append(f"App v{app_u['latest_version']}")
-    return f"{STATUS_STARTING}  Updates — Available — {', '.join(parts)}"
+    return f"{STATUS_ALERT}  Updates — Available — {', '.join(parts)}"
 
 
 def _info_mcp_title(_item=None):

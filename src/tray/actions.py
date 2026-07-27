@@ -408,6 +408,22 @@ def copy_to_clipboard(text: str) -> bool:
     return False
 
 
+# ── Status glyphs ────────────────────────────────────────────────────────────
+# Geometric Shapes (U+25xx), deliberately NOT emoji. Win32 MessageBoxW and the
+# pystray Win32 menus both draw through GDI, which has no color-emoji fallback —
+# the old 🔴🟡🟢🔵 indicators all collapsed to the same gray disc on Windows.
+# These render natively in Segoe UI and SF Pro, and encode state by *shape*, so
+# they survive monochrome rendering and red-green color blindness alike.
+#
+# Defined here rather than in either tray module because both trays and the help
+# legend below need them, and this module already imports without pystray/rumps.
+STATUS_OFF      = "○"  # idle      — stopped / not connected
+STATUS_STARTING = "◎"  # working   — starting / connecting / checking
+STATUS_ON       = "●"  # live      — running / connected / up to date
+STATUS_EXTERNAL = "◆"  # running, owned by the LocalLens desktop app
+STATUS_ALERT    = "▲"  # attention — connection error / update ready
+
+
 # ── Onboarding / Help ────────────────────────────────────────────────────────
 
 _ONBOARD_MARKER = APP_DIR / "tray_onboarded.txt"
@@ -421,16 +437,23 @@ _WELCOME_TEXT = (
 )
 
 _HELP_TEXT = (
-    "What the status dots mean:\n\n"
+    "Status at a glance\n"
+    f"  {STATUS_OFF}   idle — not running / not connected\n"
+    f"  {STATUS_STARTING}   working — starting up or connecting\n"
+    f"  {STATUS_ON}   live — running and healthy\n"
+    f"  {STATUS_EXTERNAL}   running, managed by the LocalLens app\n"
+    f"  {STATUS_ALERT}   needs attention — error or update ready\n\n"
     "Claude\n"
-    "  \U0001F534 Not Connected — click \"Connect to Claude\" to set up\n"
-    "  \U0001F7E1 Connecting…\n"
-    "  \U0001F7E2 Connected — LocalLens tools are available in Claude\n\n"
+    f"  {STATUS_OFF}   Not Connected — click \"Connect to Claude\" to set up\n"
+    f"  {STATUS_STARTING}   Connecting…\n"
+    f"  {STATUS_ON}   Connected — LocalLens tools are available in Claude\n"
+    f"  {STATUS_ALERT}   Connection Error — re-run \"Connect to Claude\"\n\n"
     "Local Lens\n"
-    "  \U0001F534 Stopped — click to start the backend\n"
-    "  \U0001F7E1 Starting… (takes up to 15 seconds)\n"
-    "  \U0001F7E2 Running — click to stop\n"
-    "  \U0001F535 Running · Managed by App — the LocalLens desktop app controls the backend\n\n"
+    f"  {STATUS_OFF}   Stopped — click to start the backend\n"
+    f"  {STATUS_STARTING}   Starting… (takes up to 15 seconds)\n"
+    f"  {STATUS_ON}   Running — click to stop\n"
+    f"  {STATUS_EXTERNAL}   Running · Managed by App — the LocalLens desktop app "
+    "controls the backend\n\n"
     "Tip: after connecting or disconnecting, restart Claude Desktop "
     "so it picks up the change."
 )
@@ -1069,18 +1092,25 @@ def claude_status():
     try:
         res = get_connection_status()
         if res.get("connected"):
+            # A registered-but-broken binary is an error state, not a success —
+            # it must not lead with the same glyph as a healthy connection.
+            ok = res.get("binary_valid")
             lines = [
-                "✅ Connected to Claude",
+                f"{STATUS_ON}  Connected to Claude" if ok
+                else f"{STATUS_ALERT}  Connected, but the binary is invalid or missing",
                 f"Command: {res.get('command')}",
-                f"Config: {res.get('config_path')}"
+                f"Config: {res.get('config_path')}",
+                f"Binary: {'Valid' if ok else 'Invalid/Missing'}",
             ]
-            if res.get("binary_valid"):
-                lines.append("Binary: Valid")
-            else:
-                lines.append("Binary: Invalid/Missing")
+            if not ok:
+                lines.append("\nRe-run \"Connect to Claude\" to repair the connection.")
             _show_alert("Claude Status", "\n".join(lines))
         else:
-            _show_alert("Claude Status", "⚪ Not connected to Claude.\nUse 'Connect to Claude' to set it up.")
+            _show_alert(
+                "Claude Status",
+                f"{STATUS_OFF}  Not connected to Claude.\n"
+                "Use 'Connect to Claude' to set it up."
+            )
     except Exception as e:
         _show_alert("Claude Status Error", str(e))
 
