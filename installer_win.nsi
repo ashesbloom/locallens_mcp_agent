@@ -25,9 +25,9 @@ RequestExecutionLevel user
 SetCompressor /SOLID lzma
 
 ; ── UI ───────────────────────────────────────────────────────────────────────
-!define MUI_ICON   "icons\ll_black\icon.ico"
-!define MUI_UNICON "icons\ll_black\icon.ico"
-; 164x314 BMP3, generated from icons/ll_black/icon.png by the release workflow
+!define MUI_ICON   "icons\ll_red_trans\icon.ico"
+!define MUI_UNICON "icons\ll_red_trans\icon.ico"
+; 164x314 BMP3, generated from icons/ll_red_trans/icon.png by the release workflow
 ; so it can never drift from the shipped app icon.
 ; Guarded so a local `makensis installer_win.nsi` without a prior asset build
 ; still compiles, falling back to MUI's default artwork.

@@ -142,7 +142,7 @@ jobs:
           # failure on the artifact actually being absent rather than on $?.
           create-dmg \
             --volname "LocalLens Agent" \
-            --volicon "icons/ll_black/icon.icns" \
+            --volicon "icons/ll_red_trans/icon.icns" \
             --window-pos 200 120 \
             --window-size 560 380 \
             --icon-size 110 \
@@ -219,12 +219,12 @@ jobs:
       - name: Generate MUI2 welcome bitmap
         # MUI_WELCOMEFINISHPAGE_BITMAP needs a 164x314 BMP3 with no alpha
         # channel. Generated from the shipped app icon rather than committed,
-        # so the installer artwork can never drift from icons/ll_black/.
+        # so the installer artwork can never drift from icons/ll_red_trans/.
         # Pillow is already present via .[tray].
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path build\installer | Out-Null
-          python -c "from PIL import Image; c = Image.new('RGB', (164, 314), 'white'); l = Image.open('icons/ll_black/icon.png').convert('RGBA').resize((128, 128)); c.paste(l, (18, 40), l); c.save('build/installer/welcome.bmp', 'BMP')"
+          python -c "from PIL import Image; c = Image.new('RGB', (164, 314), 'white'); l = Image.open('icons/ll_red_trans/icon.png').convert('RGBA').resize((128, 128)); c.paste(l, (18, 40), l); c.save('build/installer/welcome.bmp', 'BMP')"
           if (-not (Test-Path "build\installer\welcome.bmp")) {
             Write-Error "welcome.bmp was not generated"
             exit 1

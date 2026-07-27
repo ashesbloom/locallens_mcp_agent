@@ -57,5 +57,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='icons/ll_black/icon.ico',
+    icon='icons/ll_red_trans/icon.ico',
 )

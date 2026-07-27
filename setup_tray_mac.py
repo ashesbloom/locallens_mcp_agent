@@ -5,7 +5,7 @@ DATA_FILES = []
 
 OPTIONS = {
     'argv_emulation': False,
-    'iconfile': 'icons/ll_black/icon.icns',
+    'iconfile': 'icons/ll_red_trans/icon.icns',
     'plist': {
         'LSUIElement': True,  # Runs app without a dock icon (background app)
         'CFBundleName': 'LocalLens Agent',

@@ -14,12 +14,11 @@ Architecture:
 """
 import threading
 import time
-import sys
 import os
 import signal
 import ctypes
 import pystray
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 from .status import is_locallens_running, is_locallens_app_running
 from .actions import (
@@ -40,6 +39,7 @@ _cached_claude_binary_valid = False
 _cached_ll_running = False
 _cached_app_running = False
 _managed_ll_pids: list = []
+_cached_dark_taskbar = True
 _stop_event = threading.Event()
 
 # Transient action states — drive the ◎ "working" indicators
@@ -108,7 +108,15 @@ def _poll_status():
     """Poll backend / Claude connection status every 3 seconds."""
     global _cached_claude_connected, _cached_claude_binary_valid
     global _cached_ll_running, _cached_app_running, _managed_ll_pids
+    global _cached_dark_taskbar
     while not _stop_event.is_set():
+        # Repaint the "LL" icon if the user flipped light/dark since last tick
+        dark = _taskbar_is_dark()
+        if dark != _cached_dark_taskbar:
+            _cached_dark_taskbar = dark
+            if _icon is not None:
+                _icon.icon = _render_ll_icon(dark)
+
         # Claude connection state (reads config JSON — no process scan)
         state = get_claude_connection_state()
         _cached_claude_connected = state["connected"]
@@ -197,39 +205,75 @@ def _refresh_loop():
         _stop_event.wait(1)
 
 
-# ── Icon loading ──────────────────────────────────────────────────────────────
+# ── Tray icon ─────────────────────────────────────────────────────────────────
+#
+# The notification area shows the "LL" wordmark, not the app logo — same as the
+# macOS menu bar (tray_mac.py sets app.title = "LL").  The logo is a detailed
+# starburst; at the 16 px the tray actually renders it collapses into a smudge,
+# whereas two letters stay readable.  The app logo is still used everywhere it
+# has room: the .exe, the installer, and the taskbar/Alt-Tab entries.
 
-def _load_tray_icon() -> Image.Image:
+def _taskbar_is_dark() -> bool:
     """
-    Load the bundled black LL icon (visible on both light and dark taskbars).
-    Tries the PyInstaller bundle path first, then the dev-mode project root.
-    Falls back to a dark programmatic icon if the file can't be found.
+    True when the notification area is drawn dark.
+
+    SystemUsesLightTheme is the *taskbar* toggle; AppsUseLightTheme (the one
+    that's easy to grab by mistake) controls in-app chrome and can be set the
+    other way round.  Missing value = pre-1903 Windows, which only ever had the
+    dark taskbar.
     """
-    candidates = []
-    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-        candidates.append(os.path.join(sys._MEIPASS, "icons", "ll_black", "32x32.png"))
-    # Dev-mode: icons/ sits two levels above this file (src/tray/tray_win.py)
-    dev_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    candidates.append(os.path.join(dev_root, "icons", "ll_black", "32x32.png"))
-
-    for path in candidates:
-        if os.path.exists(path):
-            try:
-                return Image.open(path).convert("RGBA")
-            except Exception:
-                pass  # corrupt file — fall through to programmatic fallback
-
-    # Fallback: dark programmatic icon
-    from PIL import ImageDraw, ImageFont
-    image = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
     try:
-        font = ImageFont.truetype("arial.ttf", 28)
-    except OSError:
-        font = ImageFont.load_default()
-    bbox = draw.textbbox((0, 0), "LL", font=font)
-    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    draw.text(((64 - tw) / 2, (64 - th) / 2), "LL", fill="#1a1a1a", font=font)
+        import winreg
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+        ) as key:
+            return winreg.QueryValueEx(key, "SystemUsesLightTheme")[0] == 0
+    except Exception:
+        return True
+
+
+def _tray_font(size: int):
+    """Segoe UI Bold — the Windows system font. Falls back down to whatever exists."""
+    for name in ("segoeuib.ttf", "arialbd.ttf", "arial.ttf"):
+        try:
+            return ImageFont.truetype(name, size)
+        except OSError:
+            continue
+    try:
+        return ImageFont.load_default(size)  # Pillow >= 10.1
+    except TypeError:
+        return ImageFont.load_default()
+
+
+def _render_ll_icon(dark_taskbar: bool) -> Image.Image:
+    """
+    Draw the "LL" wordmark in whichever ink the current taskbar theme needs.
+
+    The theme flag carries the contrast; the thin outline only defines the edge.
+    That covers accent-coloured and translucent taskbars too — Windows offers
+    those only while dark mode is on, so they get the light ink. A thicker
+    outline would cover the rest, but at the 16 px the tray renders it stops
+    being an outline and becomes a halo two-thirds the size of the letters.
+    """
+    ink, outline = ("#ffffff", "#000000") if dark_taskbar else ("#101010", "#ffffff")
+    # 4x the 16 px tray slot — supersampling keeps the downscaled strokes clean,
+    # and Windows picks whatever size it needs from this one bitmap.
+    size = 64
+    # Draw oversized, then crop to the actual glyphs and scale to fit. The font
+    # is Segoe UI Bold on Windows but whatever the fallback resolves to
+    # elsewhere, and their metrics differ enough that a fixed point size would
+    # leave the wordmark cropped on one machine and swimming in space on another.
+    scratch = Image.new("RGBA", (size * 2, size * 2), (0, 0, 0, 0))
+    ImageDraw.Draw(scratch).text(
+        (size // 2, size // 2), "LL", font=_tray_font(size),
+        fill=ink, stroke_width=2, stroke_fill=outline,
+    )
+    glyphs = scratch.crop(scratch.getbbox())
+    glyphs.thumbnail((size - 4, size - 4), Image.LANCZOS)
+
+    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    image.paste(glyphs, ((size - glyphs.width) // 2, (size - glyphs.height) // 2))
     return image
 
 
@@ -677,7 +721,7 @@ def on_quit(icon, item):
 # ── Build menu and run ────────────────────────────────────────────────────────
 
 def run_win_tray():
-    global _icon
+    global _icon, _cached_dark_taskbar
 
     # ── Single-instance enforcement via Win32 named mutex ─────────────
     _mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "LocalLensAgent_SingleInstance")
@@ -694,7 +738,8 @@ def run_win_tray():
     threading.Thread(target=_poll_status, daemon=True).start()
     threading.Thread(target=_update_check_loop, daemon=True).start()
 
-    image = _load_tray_icon()
+    _cached_dark_taskbar = _taskbar_is_dark()
+    image = _render_ll_icon(_cached_dark_taskbar)
 
     # ── Claude submenu ───────────────────────────────────────────────────
     claude_submenu = pystray.Menu(
