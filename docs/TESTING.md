@@ -175,6 +175,77 @@ sort '/Users/mayankpandeydk123gmail.com/Bot testing/output' by faces to '/Users/
 ---
 ---
 
+# 🚀 Revolutionary Use Case Tests
+
+> These aren't correctness tests for a single tool — they're conversational flows that only make sense because the assistant, not a fixed UI, is driving. Each one is "old way vs. new way": what a normal photo app forces you to click through, versus what this does in a sentence. Grounded in shipped tools only (see the corrected `Marketing Needed` section above — no smart albums, no Ollama Chat UI claims here).
+
+## Test 11: Multi-Person Enrollment in One Message
+
+**Old way:** face-tagging wizards make you add one person at a time, click-by-click.
+
+```
+enroll two people using LL: Priya from '/Users/mayankpandeydk123gmail.com/Bot testing/faces/priya', and Raj from '/Users/mayankpandeydk123gmail.com/Bot testing/faces/raj'
+```
+
+**✅ Expected:** Single `add_face_enroll` call with `{"Priya": ".../priya", "Raj": ".../raj"}` — not two separate calls, not a double-nested `{"enrollments": {...}}` dict.
+**❌ Fail if:** Only enrolls one person, asks the user to repeat the request per-person, or produces the double-nested dict bug the guard in `pro_tools.py` exists to catch.
+
+---
+
+## Test 12: Judgment-Based Duplicate Cleanup (Staged, Not Blind)
+
+**Old way:** duplicate finders show a report, then a single "delete all" button with no room for a threshold conversation.
+
+```
+find duplicates in '/Users/mayankpandeydk123gmail.com/Bot testing/output' using LL, but only show me what's over 95% similar before deleting anything
+```
+
+**✅ Expected:** Calls `find_duplicates`, presents the matches above the requested threshold, and explicitly waits for confirmation before ever calling `delete_duplicates`.
+**❌ Fail if:** Deletes without confirmation, ignores the similarity threshold, or treats "show me" as permission to delete.
+
+---
+
+## Test 13: Mid-Job Abort by Just Saying Stop
+
+**Old way:** the only "cancel" for a runaway sort is force-quitting the app.
+
+```
+[mid-sort] actually stop that, I picked the wrong folder
+```
+
+**✅ Expected:** Calls `abort_job` for the active job, confirms it stopped, and does not silently let the original sort keep running in the background.
+**❌ Fail if:** Ignores the interruption and lets the job finish, or calls `abort_job` on the wrong/stale job.
+
+---
+
+## Test 14: Conversational Schedule Editing (No Settings Dig)
+
+**Old way:** changing a recurring task means reopening a settings screen and finding the right toggle again.
+
+```
+Step 1: schedule a weekly date-sort for '/Users/mayankpandeydk123gmail.com/Bot testing/output' every Sunday, using LL
+Step 2 (later turn): actually pause that Sunday job for the next two weeks
+```
+
+**✅ Expected:** Step 1 calls `schedule_auto_organize`. Step 2 calls `list_schedules` to find the right job (using conversational memory, not asking the user to re-supply the schedule ID from scratch) then `manage_schedule` to pause it.
+**❌ Fail if:** Step 2 asks the user to look up and paste a schedule ID/name it already has from Step 1, or creates a duplicate schedule instead of modifying the existing one.
+
+---
+
+## Test 15: Driving LocalLens From Inside a Coding Session (Cross-App Crossover)
+
+**Old way:** photo organizing means alt-tabbing out to a dedicated app.
+
+```
+[in Cursor, mid coding-session] before I forget — clean up the screenshots in '/Users/mayankpandeydk123gmail.com/Bot testing/output' by date using LL
+```
+
+**✅ Expected:** Same `start_sorting` call and guardrails as in Claude Desktop — no LocalLens-specific setup needed inside Cursor beyond the MCP connection already existing.
+**❌ Fail if:** Tool behaves differently or is missing entirely outside Claude Desktop (would indicate a Claude-Desktop-specific assumption leaking into tool code, which breaks the "works in any MCP client" claim).
+
+---
+---
+
 # 🪟 Windows-Specific Test Prompts
 
 > Based on Windows test setup:
@@ -506,6 +577,25 @@ sort "C:\Users\mayank\Desktop\test" by date to "C:\Users\mayank\Desktop\test"
 **❌ Fail if:**
 - `os.path.realpath()` comparison fails due to case differences (e.g., `C:\` vs `c:\`)
 - Guard doesn't trigger and photos are copied on top of themselves
+
+--
+
+# 📣 Marketing Needed (Features)
+
+> Niche/unique/revolutionary angles surfaced by reading `for LLM's/`, `docs/`, and the tool source. These are real capabilities, not aspirational copy — each maps to a shipped tool. Full campaign material lives in [`marketing/`](../marketing/).
+
+- **The only photo organizer you can talk to, that never talks back to the cloud.** LocalLens exposes itself as an MCP server — the same protocol Claude Desktop, Cursor, and any future agentic client speak. "Sort my Lucknow trip by who's in it" is a sentence, not a settings dialog, and it never leaves the machine (one-time license ping aside).
+- **Works in any MCP client, forever.** Most "AI-powered" desktop apps bolt a chatbot onto their own UI. LocalLens built the AI surface as a standard MCP server instead — so it already works in Claude Desktop today and in whatever agentic client ships next, with zero app-side changes. That's a genuine first-mover angle: "MCP-native" as a badge, not a buzzword.
+- **Conversational multi-filter photo search ("Spotlight for photos").** `start_find_group` combines person + location + date in one request — "find Vidushi's 2025 photos from Lucknow" — something no drag-and-drop photo app UI does in one step.
+- **The assistant remembers your library, not just the last message.** Path presets and enrolled faces persist across turns (`notes_and_nomenclature.md` §3) — the LLM doesn't re-ask "which folder?" every time, which is the difference between a demo and a tool people keep using.
+- **Set-and-forget autonomous organizing, described in English (Pro scheduler).** `schedule_auto_organize` / `manage_schedule` / `list_schedules` turn "watch my camera roll and sort it every Sunday night" into a standing instruction — and changing it later is another sentence ("pause that for two weeks"), not a re-dig through a settings screen.
+- **Multi-person face enrollment in one message.** `add_face_enroll` takes a whole `{"Name": "/folder"}` map at once — "here's Priya's folder, here's Raj's, enroll both" — instead of the tedious one-at-a-time tagging wizard most face-sort tools force you through.
+- **Duplicate cleanup with judgment, not a blind "delete all" button.** `find_duplicates` → `export_report` → `delete_duplicates` can be chained conversationally with a human-in-the-loop threshold — "show me what you'd delete above 95% similarity before you touch anything" — the kind of staged, reasoned batch decision a fixed UI checkbox flow can't offer.
+- **Clean mid-job abort, by just saying stop.** `abort_job` interrupts an in-flight sort or find-group operation on request, instead of the old-way fallback of force-quitting the app and hoping nothing half-written got left behind.
+- **It lives wherever you already work, not in a separate app.** Because it's MCP, the same tools are reachable from Cursor while you're mid-coding-session — "clean up my screenshots folder" without alt-tabbing to a dedicated photo app. No photo organizer has ever been able to piggyback on a tool you were already in for unrelated work.
+- **Guardrails as the actual trust story.** Source≠destination checks and path-hallucination prevention (Test 8) are what make "let an LLM touch my photo library" viable at all — worth stating plainly, but note this is table-stakes safety, not a differentiator on its own.
+
+> Not yet shippable as marketing claims — code exists but isn't ready to promote: `smart_album_suggestions` (Pro tool is registered but not ready for users yet) and the Ollama-backed Chat UI (`chat_ui.py`, not currently a supported/finished surface). Don't reference either until they're actually live.
 
 ---
 
