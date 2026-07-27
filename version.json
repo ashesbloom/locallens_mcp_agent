@@ -5,12 +5,12 @@
     "release_notes_url": "https://github.com/ashesbloom/locallens_mcp_agent/releases/latest",
     "downloads": {
       "macos-arm64": {
-        "url": "https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v1.0.27/locallens-agent-v1.0.27-macos-arm64.dmg",
-        "sha256": "0cd879545b5edfe1f22b5ca4ae38a3ef7c8b7f0e41d56ba6f87703f8ca52f08f"
+        "url": "https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v1.0.28/locallens-agent-v1.0.28-macos-arm64.dmg",
+        "sha256": "77a92fa6f671c475ea20f6573ae1ecf88d9502a72aa680e87aae07308ed59dfc"
       },
       "windows-x86_64": {
-        "url": "https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v1.0.27/locallens-agent-v1.0.27-windows-x86_64-setup.exe",
-        "sha256": "da82465b52b4bc298b40f727dc7fba444d71b0a321726f4f835a0d9f60791001"
+        "url": "https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v1.0.28/locallens-agent-v1.0.28-windows-x86_64-setup.exe",
+        "sha256": "3cb76a437161590b724781e74be9930e953ba5d172e8e78b9716747eb8b281f8"
       }
     },
     "changelog": [
@@ -26,7 +26,7 @@
         "version": "1.0.27",
         "date": "July 2026",
         "highlights": [
-          "Status indicators now render correctly on Windows \u2014 shape-coded instead of color emoji",
+          "Status indicators now render correctly on Windows — shape-coded instead of color emoji",
           "Connection errors and available updates get their own indicator instead of looking idle",
           "Rewritten status legend in Help & Getting Started"
         ]
@@ -62,7 +62,7 @@
         "date": "July 2026",
         "highlights": [
           "Added smithery.yaml for Smithery MCP directory listing",
-          "Fixed tray Claude Setup error alerts \u2014 errors now show distinct title instead of blending with success"
+          "Fixed tray Claude Setup error alerts — errors now show distinct title instead of blending with success"
         ]
       },
       {
@@ -120,7 +120,7 @@
         "date": "July 2026",
         "highlights": [
           "First public release of LocalLens MCP Agent",
-          "Native macOS menu bar tray app \u2014 install via Homebrew",
+          "Native macOS menu bar tray app — install via Homebrew",
           "16 free tools for photo organization out of the box",
           "10 Pro tools: face enrollment, duplicates, smart albums, scheduling",
           "Official LL Black branding applied across all platforms"
@@ -139,12 +139,12 @@
         "version": "1.0.0",
         "date": "July 2026",
         "highlights": [
-          "Official MCP launch \u2014 connect LocalLens to Claude, Cursor, and more",
+          "Official MCP launch — connect LocalLens to Claude, Cursor, and more",
           "Smart sorting by date, location, and people",
           "Face recognition with enrollment and search",
           "Duplicate detection and safe cleanup",
           "Scheduled auto-organize and real-time folder watching",
-          "100% local \u2014 zero data leaves your machine"
+          "100% local — zero data leaves your machine"
         ]
       }
     ]
