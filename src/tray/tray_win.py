@@ -28,7 +28,7 @@ from .actions import (
     claude_setup, claude_status, claude_remove,
     get_claude_connection_state, maybe_show_welcome, show_help_tips,
     check_updates_now, open_url, copy_to_clipboard,
-    get_current_app_info, install_mcp_update,
+    get_current_app_info, install_mcp_update, format_download_progress,
     CLAUDE_CUSTOM_INSTRUCTIONS, CLAUDE_INSTRUCTIONS_HOWTO,
 )
 
@@ -56,9 +56,9 @@ _ll_stopping = False
 
 # Update cache
 _cached_update_info: dict = {"mcp": None, "app": None}
-# Set by the update-download background thread; read by _install_update_title.
-# None = no download in progress.
-_update_download_pct: int = None
+# (downloaded_bytes, total_bytes), set by the update-download background
+# thread; read by _install_update_title. None = no download in progress.
+_update_download_progress: tuple = None
 _notified_update_versions: set = set()
 _cached_app_info: dict = {
     "mcp_version": "…", "license_tier": "Free",
@@ -100,11 +100,7 @@ def _is_pid_alive(pid: int) -> bool:
     try:
         import psutil
         proc = psutil.Process(pid)
-        # psutil.STATUS_DEAD is not a guaranteed constant on all platforms/versions.
-        # On Windows, dead processes raise NoSuchProcess (caught by except below).
-        # psutil.STATUS_ZOMBIE exists on all platforms but Windows processes
-        # never enter zombie state — they're just gone.
-        return proc.status() != psutil.STATUS_ZOMBIE
+        return proc.status() not in (psutil.STATUS_ZOMBIE, psutil.STATUS_DEAD)
     except Exception:
         return False
 
@@ -299,8 +295,8 @@ def _info_app_title(_item=None):
 
 
 def _install_update_title(_item=None):
-    if _update_download_pct is not None:
-        return f"⬇  Downloading update… {_update_download_pct}%"
+    if _update_download_progress is not None:
+        return f"⬇  Downloading update… {format_download_progress(*_update_download_progress)}"
     mcp_u = _cached_update_info.get("mcp")
     if mcp_u and mcp_u.get("update_available"):
         return f"⬇  Install Update v{mcp_u['latest_version']}…"
@@ -573,7 +569,7 @@ def on_update_details(icon, item):
 
 def _install_update_bg():
     """Shared update logic — always call from a background thread."""
-    global _update_download_pct
+    global _update_download_progress
     mcp_u = _cached_update_info.get("mcp")
     info = _cached_app_info
     mcp_ver = info.get("mcp_version", "unknown")
@@ -608,11 +604,11 @@ def _install_update_bg():
         return
 
     if has_silent_download:
-        _update_download_pct = 0
+        _update_download_progress = (0, 0)
 
         def _progress(downloaded, total):
-            global _update_download_pct
-            _update_download_pct = int(downloaded * 100 / total) if total else 0
+            global _update_download_progress
+            _update_download_progress = (downloaded, total)
 
         result = install_mcp_update(
             latest_version=latest,
@@ -622,7 +618,7 @@ def _install_update_bg():
             sha256=mcp_u.get("sha256", ""),
             progress_cb=_progress,
         )
-        _update_download_pct = None
+        _update_download_progress = None
     else:
         result = install_mcp_update(
             latest_version=latest,

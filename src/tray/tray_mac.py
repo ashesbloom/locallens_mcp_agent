@@ -8,7 +8,7 @@ from .actions import (
     claude_setup, claude_status, claude_remove,
     get_claude_connection_state, maybe_show_welcome, show_help_tips,
     check_updates_now, open_url, copy_to_clipboard,
-    get_current_app_info, install_mcp_update,
+    get_current_app_info, install_mcp_update, format_download_progress,
     CLAUDE_CUSTOM_INSTRUCTIONS, CLAUDE_INSTRUCTIONS_HOWTO,
 )
 
@@ -26,10 +26,11 @@ _stop_polling = False
 # Thread-safe queue for error messages to be shown on the main thread.
 # Background threads append (title, message) tuples; the @rumps.timer drains it.
 _pending_alerts: list = []
-# Set by the update-download background thread; drained by the @rumps.timer
-# to show "Downloading… NN%" without the timer's normal refresh stomping it.
+# (downloaded_bytes, total_bytes), set by the update-download background
+# thread; drained by the @rumps.timer to show "Downloading… NN% (x / y MB)"
+# without the timer's normal refresh stomping it.
 # None = no download in progress.
-_update_download_pct: int = None
+_update_download_progress: tuple = None
 # Set by the update installer when a silent macOS install finished and
 # swapped in the new .app — AppKit calls like quit_application() must run
 # on the main thread, so the background thread just flags this.
@@ -319,8 +320,10 @@ class LocalLensAgentApp(rumps.App):
             self.btn_info_app.title = "  ℹ  LocalLens App: Not Running"
 
         # ── Install / up-to-date button ───────────────────────────────────────
-        if _update_download_pct is not None:
-            self.btn_install_update.title = f"⬇  Downloading update… {_update_download_pct}%"
+        if _update_download_progress is not None:
+            self.btn_install_update.title = (
+                f"⬇  Downloading update… {format_download_progress(*_update_download_progress)}"
+            )
         elif mcp_u and mcp_u.get("update_available"):
             self.btn_install_update.title = f"⬇  Install Update v{mcp_u['latest_version']}…"
         else:
@@ -471,16 +474,16 @@ class LocalLensAgentApp(rumps.App):
         # Silent path: download/verify/install take real time (network +
         # DMG mount) — run off the main thread so the menu stays responsive,
         # and report progress/results through the same _pending_alerts /
-        # _update_download_pct channels the 1s main-thread timer drains.
-        global _update_download_pct
-        _update_download_pct = 0
+        # _update_download_progress channels the 1s main-thread timer drains.
+        global _update_download_progress
+        _update_download_progress = (0, 0)
 
         def _progress(downloaded, total):
-            global _update_download_pct
-            _update_download_pct = int(downloaded * 100 / total) if total else 0
+            global _update_download_progress
+            _update_download_progress = (downloaded, total)
 
         def _install_bg():
-            global _update_download_pct
+            global _update_download_progress
             result = install_mcp_update(
                 latest_version=latest,
                 release_notes_url=mcp_u.get("release_notes_url", ""),
@@ -489,7 +492,7 @@ class LocalLensAgentApp(rumps.App):
                 sha256=mcp_u.get("sha256", ""),
                 progress_cb=_progress,
             )
-            _update_download_pct = None
+            _update_download_progress = None
             self._handle_install_result(result, latest)
 
         threading.Thread(target=_install_bg, daemon=True).start()

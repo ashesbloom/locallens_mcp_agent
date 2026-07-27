@@ -118,9 +118,15 @@ jobs:
         run: |
           codesign --deep --force --sign - "dist/LocalLens Agent.app"
 
+      - name: Install create-dmg
+        run: brew install create-dmg
+
       - name: Build DMG (with app + Gatekeeper fix script)
         # The fix_locallens_agent.command file is bundled inside the DMG so that
         # users who install manually can just double-click it — no Terminal needed.
+        #
+        # create-dmg (not raw hdiutil) so the DMG opens as the conventional
+        # "drag the app onto Applications" window instead of a bare folder.
         run: |
           chmod +x fix_locallens_agent.command
 
@@ -129,11 +135,27 @@ jobs:
           cp -r "dist/LocalLens Agent.app" dmg_staging/
           cp fix_locallens_agent.command "dmg_staging/Fix LocalLens Agent.command"
 
-          hdiutil create \
-            -volname "LocalLens Agent" \
-            -srcfolder dmg_staging \
-            -ov -format UDZO \
-            "locallens-agent-${{ github.ref_name }}-macos-arm64.dmg"
+          DMG="locallens-agent-${{ github.ref_name }}-macos-arm64.dmg"
+
+          # create-dmg exits non-zero when it can't set the volume icon on a
+          # headless runner even though the DMG itself is fine, so gate the
+          # failure on the artifact actually being absent rather than on $?.
+          create-dmg \
+            --volname "LocalLens Agent" \
+            --volicon "icons/ll_black/icon.icns" \
+            --window-pos 200 120 \
+            --window-size 560 380 \
+            --icon-size 110 \
+            --icon "LocalLens Agent.app" 150 170 \
+            --app-drop-link 410 170 \
+            --icon "Fix LocalLens Agent.command" 280 310 \
+            --hide-extension "LocalLens Agent.app" \
+            "$DMG" dmg_staging/ || true
+
+          if [ ! -f "$DMG" ]; then
+            echo "::error::create-dmg did not produce $DMG"
+            exit 1
+          fi
 
       - name: Upload tray DMG
         uses: softprops/action-gh-release@v2
@@ -193,6 +215,20 @@ jobs:
 
       - name: Install NSIS
         run: choco install nsis --no-progress -y
+
+      - name: Generate MUI2 welcome bitmap
+        # MUI_WELCOMEFINISHPAGE_BITMAP needs a 164x314 BMP3 with no alpha
+        # channel. Generated from the shipped app icon rather than committed,
+        # so the installer artwork can never drift from icons/ll_black/.
+        # Pillow is already present via .[tray].
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path build\installer | Out-Null
+          python -c "from PIL import Image; c = Image.new('RGB', (164, 314), 'white'); l = Image.open('icons/ll_black/icon.png').convert('RGBA').resize((128, 128)); c.paste(l, (18, 40), l); c.save('build/installer/welcome.bmp', 'BMP')"
+          if (-not (Test-Path "build\installer\welcome.bmp")) {
+            Write-Error "welcome.bmp was not generated"
+            exit 1
+          }
 
       - name: Build NSIS installer
         shell: pwsh

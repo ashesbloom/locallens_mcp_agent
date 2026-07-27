@@ -120,6 +120,20 @@ def get_current_app_info() -> dict:
     }
 
 
+def format_download_progress(downloaded: int, total: int) -> str:
+    """
+    Render a progress_cb(downloaded, total) pair for a tray menu title, e.g.
+    "14%  (20 / 148 MB)". Shared by both trays so the two menus can't drift.
+
+    Falls back to a bare byte count when the server sends no content-length
+    (total == 0), since a percentage of an unknown total is meaningless.
+    """
+    mb = 1024 * 1024
+    if total > 0:
+        return f"{int(downloaded * 100 / total)}%  ({downloaded // mb} / {total // mb} MB)"
+    return f"{downloaded // mb} MB"
+
+
 def install_mcp_update(
     latest_version: str,
     release_notes_url: str,
@@ -241,25 +255,55 @@ def _download_and_install(download_url: str, sha256_expected: str, progress_cb=N
 def _install_windows_update(installer_path: Path):
     """
     Launch the NSIS installer silently (/S). It taskkills the running tray
-    exe, overwrites the install dir, and re-registers the autostart entry
-    (see installer_win.nsi) — the OS terminates this process mid-install,
-    so there's nothing further to do here.
+    exe and locallens-mcp.exe, wipes and repopulates the install dir, and
+    re-registers the autostart entry (see installer_win.nsi).
+
+    On success the installer terminates THIS process partway through, so the
+    wait below never returns — which makes any exit code we do observe a real
+    failure worth raising. Previously the handle was dropped entirely, so a
+    failed install (locked file, aborted section) was completely silent.
     """
     si = subprocess.STARTUPINFO()
     si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
     si.wShowWindow = 0  # SW_HIDE
-    subprocess.Popen(
+    proc = subprocess.Popen(
         [str(installer_path), "/S"],
         creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW,
         startupinfo=si,
     )
+    try:
+        returncode = proc.wait(timeout=300)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("Installer did not finish within 5 minutes")
+    if returncode != 0:
+        raise RuntimeError(
+            f"Installer exited with code {returncode}. "
+            "Close Claude Desktop and try again, or install manually from the releases page."
+        )
+
+
+def _current_app_bundle() -> Path:
+    """
+    Path of the .app bundle this process is running from, or None when not
+    running from one (dev / source checkout).
+
+    py2app sets sys.executable to
+    /<somewhere>/LocalLens Agent.app/Contents/MacOS/<exe>, so the bundle is
+    the nearest ancestor ending in .app. Used instead of a hardcoded
+    /Applications: a bundle living in ~/Applications used to get a SECOND
+    copy installed at /Applications while the old one stayed put — the exact
+    opposite of replacing the previous version.
+    """
+    return next((p for p in Path(sys.executable).parents if p.suffix == ".app"), None)
 
 
 def _install_macos_update(dmg_path: Path):
     """
-    Mount the downloaded DMG, replace /Applications/<App>.app, unmount, and
-    launch the new app. The caller (tray_mac.py) is responsible for quitting
-    the current (old) process afterwards — this function only swaps files.
+    Mount the downloaded DMG, replace the installed .app in place, unmount,
+    and schedule a relaunch for once this process has exited.
+
+    The caller (tray_mac.py) is responsible for quitting the current (old)
+    process afterwards — that quit is what triggers the relaunch below.
     """
     import shutil as _shutil
     import tempfile
@@ -274,9 +318,13 @@ def _install_macos_update(dmg_path: Path):
         if not app_src:
             raise RuntimeError("No .app bundle found inside the downloaded DMG")
 
-        app_dst = Path("/Applications") / app_src.name
+        # Replace wherever we actually live; /Applications only as a fallback
+        # for non-frozen runs.
+        app_dst = _current_app_bundle() or Path("/Applications") / app_src.name
         if app_dst.exists():
-            _shutil.rmtree(app_dst, ignore_errors=True)
+            # No ignore_errors: a permission failure here used to be swallowed,
+            # and ditto then merged the new bundle into the stale tree.
+            _shutil.rmtree(app_dst)
         subprocess.run(
             ["ditto", str(app_src), str(app_dst)],
             check=True, capture_output=True, text=True, timeout=120,
@@ -285,7 +333,30 @@ def _install_macos_update(dmg_path: Path):
         subprocess.run(["hdiutil", "detach", str(mount_point), "-quiet"], capture_output=True)
         _shutil.rmtree(mount_point, ignore_errors=True)
 
-    subprocess.Popen(["open", "-a", str(app_dst)])
+    _relaunch_after_exit(app_dst)
+
+
+def _relaunch_after_exit(app_dst: Path):
+    """
+    Reopen app_dst once this process is gone, via a detached shell that
+    outlives it.
+
+    `open` resolves an app by bundle identifier, so calling it while the old
+    instance is still registered under com.locallens.agent just re-activates
+    the OLD app — then tray_mac quits that, leaving nothing running at all.
+    Waiting for our PID to disappear first is what makes the relaunch real.
+
+    Bounded at ~30s: if the quit never happens, the watcher gives up and the
+    old instance simply keeps running, which is a safe failure.
+    """
+    subprocess.Popen(
+        [
+            "/bin/sh", "-c",
+            f'for _ in $(seq 1 100); do kill -0 {os.getpid()} 2>/dev/null || break; sleep 0.3; done; '
+            f'open -a "{app_dst}"',
+        ],
+        start_new_session=True,
+    )
 
 
 def open_url(url: str):
@@ -320,9 +391,8 @@ CLAUDE_INSTRUCTIONS_HOWTO = (
 def copy_to_clipboard(text: str) -> bool:
     """
     Copy text to the system clipboard.
-    macOS: pbcopy (UTF-8). Windows: clip.exe (UTF-16LE).
-    Returns True on success, False if the clipboard utility isn't available
-    or the copy failed for any reason.
+    macOS: pbcopy. Windows: clip.exe. Returns True on success, False if the
+    clipboard utility isn't available or the copy failed for any reason.
     """
     try:
         if sys.platform == "darwin":
@@ -330,10 +400,8 @@ def copy_to_clipboard(text: str) -> bool:
             proc.communicate(text.encode("utf-8"))
             return proc.returncode == 0
         elif sys.platform == "win32":
-            # clip.exe expects UTF-16LE — passing UTF-8 corrupts non-ASCII
-            # characters like em-dashes, arrows, and curly quotes.
             proc = subprocess.Popen(["clip"], stdin=subprocess.PIPE)
-            proc.communicate(text.encode("utf-16-le"))
+            proc.communicate(text.encode("utf-8"))
             return proc.returncode == 0
     except Exception:
         pass
@@ -787,30 +855,17 @@ def stop_locallens_backend(pid: int) -> bool:
         return True  # Already gone — that's fine
 
     except ImportError:
-        # psutil not available — platform-specific fallback
-        if sys.platform == "win32":
-            # Windows: os.getpgid() doesn't exist and os.kill() semantics differ.
-            # Use taskkill /T to kill the process tree (equivalent to POSIX killpg).
-            try:
-                subprocess.run(
-                    ["taskkill", "/PID", str(pid), "/T", "/F"],
-                    capture_output=True, timeout=10,
-                )
-                return True
-            except Exception:
-                return False
-        else:
-            # POSIX: kill the entire process group
-            # (start_new_session=True makes the child a session/group leader
-            # so its pgid == its pid, and os.killpg kills all workers too)
-            try:
-                pgid = os.getpgid(pid)
-                os.kill(pgid * -1, signal.SIGTERM)  # negative pid = kill group
-                return True
-            except ProcessLookupError:
-                return True
-            except Exception:
-                return False
+        # psutil not available — kill the entire process group
+        # (start_new_session=True makes the child a session/group leader
+        # so its pgid == its pid, and os.killpg kills all workers too)
+        try:
+            pgid = os.getpgid(pid)
+            os.kill(pgid * -1, signal.SIGTERM)  # negative pid = kill group
+            return True
+        except ProcessLookupError:
+            return True
+        except Exception:
+            return False
 
     except Exception as e:
         _show_alert("Error Stopping LocalLens", str(e))
@@ -875,19 +930,11 @@ def stop_all_backends() -> bool:
         return True
 
     except ImportError:
-        # psutil not available — platform-specific fallback
+        # psutil not available — try os.kill on each PID
         from .status import find_backend_pids
         for pid in find_backend_pids():
             try:
-                if sys.platform == "win32":
-                    # Windows: os.kill + SIGTERM has unpredictable semantics.
-                    # taskkill /T /F cleanly terminates the process tree.
-                    subprocess.run(
-                        ["taskkill", "/PID", str(pid), "/T", "/F"],
-                        capture_output=True, timeout=10,
-                    )
-                else:
-                    os.kill(pid, signal.SIGTERM)
+                os.kill(pid, signal.SIGTERM)
             except (ProcessLookupError, PermissionError):
                 pass
         return True
@@ -971,31 +1018,7 @@ def show_claude_status_terminal():
             script = 'tell application "Terminal" to do script "tail -f ~/Library/Logs/Claude/mcp*.log"'
             subprocess.Popen(["osascript", "-e", script])
         elif sys.platform == "win32":
-            # Claude Desktop on Windows can be installed two ways:
-            #   1. MSIX (Windows Store) — logs in %LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\logs\
-            #   2. Standalone EXE       — logs in %APPDATA%\Claude\logs\
-            # Probe for the MSIX path first (same logic as claude_connector.py).
-            log_path = None
-            local_appdata = os.environ.get("LOCALAPPDATA", "")
-            if local_appdata:
-                packages_dir = Path(local_appdata) / "Packages"
-                if packages_dir.is_dir():
-                    for pkg_dir in packages_dir.glob("Claude_*"):
-                        if pkg_dir.is_dir():
-                            msix_logs = pkg_dir / "LocalCache" / "Roaming" / "Claude" / "logs"
-                            if msix_logs.is_dir():
-                                log_path = str(msix_logs)
-                                break
-            if not log_path:
-                # Fallback to standalone install path
-                log_path = os.path.join(os.environ.get("APPDATA", ""), "Claude", "logs")
-
-            # Escape backslashes for PowerShell
-            ps_path = log_path.replace("\\", "\\\\")
-            subprocess.Popen([
-                "powershell", "-Command",
-                f"Start-Process powershell -ArgumentList '-NoExit -Command Get-Content -Path \"{ps_path}\\mcp*.log\" -Tail 100 -Wait'"
-            ])
+            subprocess.Popen(["powershell", "-Command", "Start-Process powershell -ArgumentList '-NoExit -Command Get-Content -Path $env:APPDATA\\Claude\\logs\\mcp*.log -Tail 100 -Wait'"])
     except Exception as e:
         _show_alert("Error opening terminal", str(e))
 

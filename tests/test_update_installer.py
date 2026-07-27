@@ -4,9 +4,14 @@ checksum surfacing in mcp_server.updater, and the download/verify/install
 flow in tray.actions (Issue 2 fix — see CLAUDE.md Gotchas).
 """
 import hashlib
+import os
+import subprocess
 import sys
 import tempfile
+from pathlib import Path
 from unittest.mock import patch, MagicMock
+
+import pytest
 
 from mcp_server import updater
 from tray import actions
@@ -143,6 +148,171 @@ class TestDownloadAndInstall:
                 progress_cb=lambda d, t: seen.append((d, t)),
             )
         assert seen == [(1000, 1000)]
+
+
+class TestFormatDownloadProgress:
+    def test_percent_and_megabytes(self):
+        mb = 1024 * 1024
+        assert actions.format_download_progress(20 * mb, 148 * mb) == "13%  (20 / 148 MB)"
+
+    def test_falls_back_to_bytes_without_content_length(self):
+        # total == 0 means the server sent no content-length; a percentage of
+        # an unknown total would be meaningless.
+        assert actions.format_download_progress(20 * 1024 * 1024, 0) == "20 MB"
+
+
+class TestCurrentAppBundle:
+    def test_resolves_nearest_app_ancestor(self):
+        exe = "/Users/x/Applications/LocalLens Agent.app/Contents/MacOS/LocalLens Agent"
+        with patch.object(sys, "executable", exe):
+            assert actions._current_app_bundle() == Path(
+                "/Users/x/Applications/LocalLens Agent.app"
+            )
+
+    def test_none_when_not_running_from_a_bundle(self):
+        with patch.object(sys, "executable", "/usr/local/bin/python3"):
+            assert actions._current_app_bundle() is None
+
+
+def _mount_with_app(tmp_path):
+    """Create a fake mounted DMG containing one .app, as hdiutil would."""
+    mount = tmp_path / "mnt"
+    (mount / "LocalLens Agent.app").mkdir(parents=True)
+    return mount
+
+
+class TestInstallMacosUpdate:
+    """
+    The old implementation hardcoded /Applications and called `open -a` while
+    the old process was still alive — so a bundle in ~/Applications got a
+    second copy and the app never actually restarted.
+    """
+
+    def test_replaces_the_bundle_it_is_running_from(self, tmp_path):
+        mount = _mount_with_app(tmp_path)
+        installed = tmp_path / "Applications" / "LocalLens Agent.app"
+        installed.mkdir(parents=True)
+        exe = str(installed / "Contents" / "MacOS" / "LocalLens Agent")
+
+        with (
+            patch.object(tempfile, "mkdtemp", return_value=str(mount)),
+            patch.object(sys, "executable", exe),
+            patch("shutil.rmtree") as rmtree,
+            patch.object(actions.subprocess, "run") as run,
+            patch.object(actions, "_relaunch_after_exit"),
+        ):
+            actions._install_macos_update(tmp_path / "update.dmg")
+
+        ditto = next(c for c in run.call_args_list if c.args[0][0] == "ditto")
+        assert ditto.args[0][2] == str(installed)
+        # Removed, and NOT with ignore_errors — a failure must surface.
+        rmtree.assert_any_call(installed)
+
+    def test_falls_back_to_applications_outside_a_bundle(self, tmp_path):
+        mount = _mount_with_app(tmp_path)
+        with (
+            patch.object(tempfile, "mkdtemp", return_value=str(mount)),
+            patch.object(sys, "executable", "/usr/local/bin/python3"),
+            patch("shutil.rmtree"),
+            patch.object(actions.subprocess, "run") as run,
+            patch.object(actions, "_relaunch_after_exit"),
+        ):
+            actions._install_macos_update(tmp_path / "update.dmg")
+
+        ditto = next(c for c in run.call_args_list if c.args[0][0] == "ditto")
+        assert ditto.args[0][2] == "/Applications/LocalLens Agent.app"
+
+    def test_removal_failure_propagates(self, tmp_path):
+        mount = _mount_with_app(tmp_path)
+        installed = tmp_path / "Applications" / "LocalLens Agent.app"
+        installed.mkdir(parents=True)
+        exe = str(installed / "Contents" / "MacOS" / "LocalLens Agent")
+
+        def _fail_on_bundle(path, *a, **kw):
+            if Path(path) == installed:
+                raise PermissionError("read-only volume")
+
+        with (
+            patch.object(tempfile, "mkdtemp", return_value=str(mount)),
+            patch.object(sys, "executable", exe),
+            patch("shutil.rmtree", side_effect=_fail_on_bundle),
+            patch.object(actions.subprocess, "run"),
+            patch.object(actions, "_relaunch_after_exit"),
+            pytest.raises(PermissionError),
+        ):
+            actions._install_macos_update(tmp_path / "update.dmg")
+
+    def test_relaunch_waits_for_this_process_to_exit(self, tmp_path):
+        app = tmp_path / "LocalLens Agent.app"
+        with patch.object(actions.subprocess, "Popen") as popen:
+            actions._relaunch_after_exit(app)
+
+        argv, kwargs = popen.call_args.args[0], popen.call_args.kwargs
+        assert argv[:2] == ["/bin/sh", "-c"]
+        # Must poll our own PID before opening, or `open` just re-activates
+        # the still-registered old instance instead of launching the new one.
+        assert f"kill -0 {os.getpid()}" in argv[2]
+        assert f'open -a "{app}"' in argv[2]
+        # Detached, so it outlives the process it is waiting on.
+        assert kwargs["start_new_session"] is True
+
+
+def _fake_win_subprocess(returncode=0, wait_side_effect=None):
+    """
+    Stand-in for the subprocess module inside tray.actions.
+
+    _install_windows_update touches Windows-only attributes (STARTUPINFO,
+    DETACHED_PROCESS, ...) that don't exist on macOS/Linux, so the whole
+    module reference is swapped rather than patched attribute by attribute.
+    """
+    proc = MagicMock()
+    if wait_side_effect is not None:
+        proc.wait.side_effect = wait_side_effect
+    else:
+        proc.wait.return_value = returncode
+    fake = MagicMock()
+    fake.Popen.return_value = proc
+    fake.TimeoutExpired = subprocess.TimeoutExpired  # real class, for `except`
+    return fake
+
+
+class TestInstallWindowsUpdate:
+    """
+    The Popen handle used to be discarded, so an aborted NSIS section (locked
+    locallens-mcp.exe, killed process tree) failed completely silently.
+    """
+
+    def test_silent_when_installer_succeeds(self, tmp_path):
+        with patch.object(actions, "subprocess", _fake_win_subprocess(returncode=0)):
+            actions._install_windows_update(tmp_path / "setup.exe")  # no raise
+
+    def test_raises_on_nonzero_exit(self, tmp_path):
+        with (
+            patch.object(actions, "subprocess", _fake_win_subprocess(returncode=2)),
+            pytest.raises(RuntimeError, match="exited with code 2"),
+        ):
+            actions._install_windows_update(tmp_path / "setup.exe")
+
+    def test_raises_on_timeout(self, tmp_path):
+        timeout = subprocess.TimeoutExpired(cmd="setup.exe", timeout=300)
+        with (
+            patch.object(actions, "subprocess", _fake_win_subprocess(wait_side_effect=timeout)),
+            pytest.raises(RuntimeError, match="did not finish"),
+        ):
+            actions._install_windows_update(tmp_path / "setup.exe")
+
+    def test_install_failure_surfaces_through_download_and_install(self, tmp_path):
+        """The raise must reach the tray as a reportable error, not vanish."""
+        content = b"binary data"
+        real_sha = hashlib.sha256(content).hexdigest()
+        with (
+            patch.object(tempfile, "gettempdir", return_value=str(tmp_path)),
+            patch("httpx.stream", return_value=_fake_stream(content)),
+            patch.object(actions, "_install_windows_update", side_effect=RuntimeError("locked")),
+            patch.object(actions.sys, "platform", "win32"),
+        ):
+            result = actions._download_and_install("https://example.com/f.exe", real_sha)
+        assert result == {"method": "silent", "success": False, "error": "locked"}
 
 
 class TestInstallMcpUpdateFrozenFallback:
