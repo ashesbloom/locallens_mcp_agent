@@ -42,7 +42,12 @@ SetCompressor /SOLID lzma
 LocalLens photo library to Claude Desktop.$\r$\n$\r$\nEverything runs on this \
 machine — no photos are ever uploaded.$\r$\n$\r$\nClick Next to continue."
 
-!define MUI_FINISHPAGE_RUN '"$INSTDIR\${APP_EXE}"'
+; Bare path, NO quotes — MUI expands this as `Exec "$\"${...}$\""`, i.e. it
+; adds the runtime quoting that ${APP_EXE}'s space needs. Wrapping it here
+; too left literal quotes mid-token, so Exec saw 3 arguments and makensis
+; aborted at MUI_PAGE_FINISH. Verify any change with:
+;   makensis -DAPP_VERSION=v0 -PPO installer_win.nsi | grep Exec
+!define MUI_FINISHPAGE_RUN "$INSTDIR\${APP_EXE}"
 !define MUI_FINISHPAGE_RUN_TEXT "Launch ${APP_NAME}"
 !define MUI_FINISHPAGE_TEXT \
     "${APP_NAME} has been installed and will start automatically when you sign in.\
