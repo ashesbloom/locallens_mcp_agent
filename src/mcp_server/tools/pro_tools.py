@@ -205,7 +205,8 @@ def register_pro_tools(mcp: FastMCP):
     @mcp.tool()
     async def get_license_status() -> Dict[str, Any]:
         """
-        Check the current license tier (Free or Pro).
+        Check the LocalLens (LL) license tier — Free or Pro.
+        Use for "my LL license", "am I Pro", "LocalLens subscription", "upgrade status".
         Returns activation state, tier name, and activation date if active.
         No internet required — reads from local cache only.
         """

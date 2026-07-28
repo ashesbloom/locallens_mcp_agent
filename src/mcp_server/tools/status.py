@@ -15,8 +15,9 @@ def register_status(mcp: FastMCP):
     @mcp.tool()
     async def check_app_status() -> Dict[str, Any]:
         """
-        Check if LocalLens is running and healthy.
-        Use this when the user asks if the app is running, or generally to confirm connection.
+        Check whether LocalLens (LL) is running, and report its license tier and version.
+        Use for "is LL running", "is LocalLens working", "LL status", "my LL license",
+        "am I Pro" — this one call covers health, license tier, and version together.
         Also checks if heavy dependencies (like face_recognition) are available.
         """
         try:

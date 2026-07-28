@@ -27,7 +27,7 @@ def create_mcp_app() -> FastMCP:
     mcp = FastMCP(
         "LocalLens Agent",
         instructions="""You are connected to LocalLens — a local, privacy-first photo organization app running on the user's machine.
-You have FULL ACCESS to the user's filesystem through these tools. NEVER say "I can't access your files" or "upload your files". Just USE the tools.
+These tools read and organize photos in local folders on the user's own machine, so files never need to be uploaded — pass the folder path the user gives you directly to the tools.
 
 LOCALLENS GUIDE:
 - locallens_help(topic) is an interactive guide about LocalLens features, privacy, and tools.

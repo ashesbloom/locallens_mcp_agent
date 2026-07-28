@@ -369,13 +369,30 @@ def open_url(url: str):
 # The exact payload meant to be pasted verbatim into Claude Desktop's custom
 # instructions field — kept separate from any explanatory text so the "Copy"
 # action never copies more than what should actually go there.
+# ASCII only, deliberately: this string is piped through pbcopy/clip, which
+# decode stdin using the platform's locale rather than UTF-8. A single em dash
+# here becomes mojibake on both macOS and Windows.
 CLAUDE_CUSTOM_INSTRUCTIONS = (
-    "When I mention photo folders, file paths, or ask to analyse/sort/organize photos:\n"
-    "- ALWAYS use the LocalLens MCP tools first (analyse_folder, start_sorting, etc.)\n"
-    "- NEVER say \"I can't access your files\" or suggest uploading — LocalLens handles file access\n"
-    "- ALWAYS call analyse_folder() BEFORE start_sorting() to check for subfolders\n"
-    "- ALWAYS default to operation_mode \"copy\" unless I explicitly say \"move\"\n"
-    "- NEVER invent destination folder paths — ask me or use get_path_presets()"
+    "LocalLens is my photo organizer, running locally on this computer.\n"
+    "When I say \"LL\" I mean LocalLens.\n"
+    "\n"
+    "Which connector to use:\n"
+    "- My photos, folders, or file paths on this machine -> the LocalLens\n"
+    "  connector. If its tools are not loaded yet, load them first, then use\n"
+    "  them. The files are already here, so there is no upload step; pass the\n"
+    "  folder path I give you straight through.\n"
+    "- The web, or anything not on this machine -> your normal web/cloud tools.\n"
+    "  LocalLens cannot see those.\n"
+    "\n"
+    "How to act:\n"
+    "- \"is LL running\", \"my LL license\", \"LL status\" -> check_app_status\n"
+    "  answers running state, license tier, and version in one call.\n"
+    "- When my request maps to one LocalLens action, take it and tell me the\n"
+    "  result. Ask first only when a detail it needs is missing or ambiguous.\n"
+    "- The LocalLens tools carry their own workflow and safety rules. Follow\n"
+    "  those as written; no need to repeat them back to me.\n"
+    "- After a job, summarize briefly: copied or moved, where it went, how many\n"
+    "  files. Then offer to open the folder."
 )
 
 CLAUDE_INSTRUCTIONS_HOWTO = (
@@ -396,12 +413,19 @@ def copy_to_clipboard(text: str) -> bool:
     """
     try:
         if sys.platform == "darwin":
-            proc = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
+            # pbcopy decodes stdin with the locale's charset, and GUI apps launched
+            # from Finder inherit no LC_CTYPE — so UTF-8 bytes land as MacRoman.
+            proc = subprocess.Popen(
+                ["pbcopy"], stdin=subprocess.PIPE,
+                env={**os.environ, "LC_CTYPE": "UTF-8"},
+            )
             proc.communicate(text.encode("utf-8"))
             return proc.returncode == 0
         elif sys.platform == "win32":
+            # clip.exe decodes stdin with the console codepage; UTF-16 with a BOM
+            # is the one form it reads correctly regardless of locale.
             proc = subprocess.Popen(["clip"], stdin=subprocess.PIPE)
-            proc.communicate(text.encode("utf-8"))
+            proc.communicate(text.encode("utf-16"))
             return proc.returncode == 0
     except Exception:
         pass
