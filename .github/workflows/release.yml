@@ -59,6 +59,28 @@ jobs:
         run: |
           pyinstaller locallens-mcp.spec
 
+      - name: Smoke-test the binary
+        # PyInstaller only WARNS about imports it cannot resolve, so a green
+        # build says nothing about whether the binary actually starts. v1.0.29
+        # shipped binaries built against mcp 2.0.0, which had removed
+        # mcp.server.fastmcp — every job passed and every artifact crashed on
+        # launch. --claude-status walks the real import graph, needs no Claude
+        # Desktop installed, and exits 0 anywhere, so it is a valid check on a
+        # bare runner. Asserting the reported version also catches a release
+        # built from a stale or unbumped tree.
+        shell: bash
+        env:
+          # Empty on workflow_dispatch, where ref_name is a branch. The startup
+          # check still runs; only the version comparison is skipped.
+          TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+          BIN: ./dist/${{ matrix.artifact_name }}
+        run: |
+          set -euo pipefail
+          out=$("$BIN" --claude-status)
+          echo "$out"
+          echo "$out" | python -c "import json,os,sys; v=json.load(sys.stdin)['version']; t=os.environ['TAG'].lstrip('v'); sys.exit(None if not t or v==t else 'version mismatch: binary reports %s, tag is %s' % (v,t))"
+          echo "OK: binary starts and its imports resolve"
+
       - name: Create archive (Unix)
         if: runner.os != 'Windows'
         run: ${{ matrix.archive_cmd }}
@@ -108,6 +130,22 @@ jobs:
           mv pyproject.toml pyproject.toml.bak
           python setup_tray_mac.py py2app
           mv pyproject.toml.bak pyproject.toml
+
+      - name: Smoke-test the bundled MCP server
+        # Claude Desktop runs the .app's embedded python as
+        # `-m mcp_server.main` (see get_mcp_command_config in
+        # claude_connector.py), so the bundle has to satisfy that import graph
+        # on its own. py2app's `packages` list is maintained by hand, so a
+        # dependency that moves or disappears upstream is only caught by
+        # actually running it — which is how the mcp 2.0.0 break surfaced.
+        env:
+          TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+        run: |
+          set -euo pipefail
+          out=$("dist/LocalLens Agent.app/Contents/MacOS/python" -m mcp_server.main --claude-status)
+          echo "$out"
+          echo "$out" | python -c "import json,os,sys; v=json.load(sys.stdin)['version']; t=os.environ['TAG'].lstrip('v'); sys.exit(None if not t or v==t else 'version mismatch: bundle reports %s, tag is %s' % (v,t))"
+          echo "OK: bundled MCP server starts and its imports resolve"
 
       - name: Ad-hoc sign the app bundle
         # This is NOT a full Apple notarization (which requires a paid Developer
@@ -212,6 +250,19 @@ jobs:
           }
           Write-Host "PyInstaller output OK:"
           Get-ChildItem "dist\LocalLens Agent" | Select-Object Name, Length
+
+      - name: Smoke-test the bundled locallens-mcp.exe
+        # The step above only proves the files exist — which they also did for
+        # v1.0.29, whose binaries could not start. Run it for real.
+        shell: bash
+        env:
+          TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+        run: |
+          set -euo pipefail
+          out=$("dist/LocalLens Agent/locallens-mcp.exe" --claude-status)
+          echo "$out"
+          echo "$out" | python -c "import json,os,sys; v=json.load(sys.stdin)['version']; t=os.environ['TAG'].lstrip('v'); sys.exit(None if not t or v==t else 'version mismatch: exe reports %s, tag is %s' % (v,t))"
+          echo "OK: bundled locallens-mcp.exe starts and its imports resolve"
 
       - name: Install NSIS
         run: choco install nsis --no-progress -y
