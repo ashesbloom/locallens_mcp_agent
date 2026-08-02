@@ -616,7 +616,11 @@ python -m pytest tests/test_update_installer.py -v
 | `start_sorting(primary_sort="People")` with 0 enrolled faces | `actions.py` | Returns `{"error": "no_enrolled_faces"}` |
 | `start_sorting(wait_for_completion=...)` default value | `actions.py` | Default is `True` |
 | `start_find_group(wait_for_completion=...)` default value | `actions.py` | Default is `True` |
-| `_launch_daemon_silent()` PID check on Windows | `pro_tools.py` | Uses `ctypes.windll.kernel32.OpenProcess()`, NOT `os.kill(pid, 0)` |
+| `_ensure_daemon()` when the daemon cannot start | `pro_tools.py` | Returns `daemon_running: False`, verified via `/api/scheduler/daemon-status` — never assumed from a bare `Popen` |
+| `schedule_auto_organize` guidance with a dead daemon | `pro_tools.py` | Says the schedule is saved but NOT monitored; must not claim sweeps will run |
+| `schedule_auto_organize` next_actions | `pro_tools.py` | Includes `open_scheduler_dashboard`, matching `create_active_folder` and `list_schedules` |
+| Any daemon start/stop from the MCP | `pro_tools.py` | Issues **no** `POST /api/scheduler/daemon-command`. Frozen, that endpoint's `sys.executable` is the backend binary, so it boots a backend clone that overwrites `port.txt` and makes the next call clone again |
+| `manage_schedule(action="stop_daemon")` | `pro_tools.py` | Signals the PID in `scheduler.pid` with `SIGTERM`, then verifies via `daemon-status`; reports `still_running` if it did not stop |
 | `copy_to_clipboard()` on Windows | `tray/actions.py` | Encodes as UTF-16LE for `clip.exe` |
 | `stop_locallens_backend()` without psutil on Windows | `tray/actions.py` | Uses `taskkill /PID /T /F`, NOT `os.getpgid()` |
 | `stop_all_backends()` without psutil on Windows | `tray/actions.py` | Uses `taskkill /PID /T /F`, NOT `os.kill(SIGTERM)` |

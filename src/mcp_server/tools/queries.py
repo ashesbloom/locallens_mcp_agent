@@ -24,6 +24,60 @@ def _handle_error(e: Exception) -> Dict[str, Any]:
     return {"error": str(e)}
 
 
+async def resolve_path_preset(value: str, side: str = "source") -> Dict[str, Any]:
+    """
+    Turn a folder argument into a real path, accepting a saved preset NAME as well as a path.
+
+    Prose alone could not keep the assistant reaching for get_path_presets — the rule telling it
+    to lived in the server `instructions` blob, past the point where the client truncates (see
+    main.py). This is the same rule enforced in code, so a preset name works even when no prose
+    survives the trip.
+
+    Returns one of:
+        {"path": "/real/path"}     - use this; either it was already a directory, or the value
+                                     matched a saved preset name
+        {"error": ...}             - not a directory and not a known preset; the message lists
+                                     the saved preset names so the caller can pick one
+
+    `side` picks which half of the preset to return ("source" or "destination").
+
+    Deliberately narrow: a preset is only substituted when `value` is NOT an existing directory,
+    so a real path always wins and nothing is silently redirected. Substituting a path the user
+    saved themselves is not the same as inventing one.
+    """
+    expanded = os.path.expanduser((value or "").strip())
+    if os.path.isdir(expanded):
+        return {"path": expanded}
+
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(f"{get_locallens_url()}/api/presets/paths", timeout=5)
+            r.raise_for_status()
+            presets = r.json() or {}
+    except Exception:
+        # Backend unreachable — say the path is bad, not that presets are broken.
+        return {"error": f"'{value}' is not an existing folder."}
+
+    if not isinstance(presets, dict):
+        return {"error": f"'{value}' is not an existing folder."}
+
+    needle = (value or "").strip().lower()
+    for name, paths in presets.items():
+        if name.strip().lower() == needle and isinstance(paths, dict):
+            stored = paths.get(side)
+            if stored:
+                return {"path": os.path.expanduser(stored), "resolved_from_preset": name}
+
+    known = ", ".join(f'"{n}"' for n in presets) or "none saved yet"
+    return {
+        "error": (
+            f"'{value}' is not an existing folder, and no saved path preset has that name. "
+            f"Saved presets: {known}. Ask the user which one they meant, or ask for the full "
+            f"path — do not guess."
+        )
+    }
+
+
 def _scan_subfolders(root: str, ignore_set: set) -> List[Dict[str, Any]]:
     """Walk root and return a list of immediate subfolders with supported photo counts."""
     subfolders = []
@@ -83,8 +137,30 @@ def register_queries(mcp: FastMCP):
     @mcp.tool()
     async def get_path_presets() -> Dict[str, Any]:
         """
-        Get the saved source and destination folder path presets from LocalLens.
-        Use this when you need predefined folder paths to use for sorting or actions without asking the user.
+        Look up the user's saved folder paths by the NAME they gave them.
+
+        A "path preset" is a named source → destination pair the user saved earlier via
+        remember_paths. Users refer to them by name and expect you to know the paths:
+        - "use my bot testing preset"      - "sort my work photos folder"
+        - "the usual folder" / "same as last time"
+        - "use my saved paths" / "my LL presets"
+
+        CALL THIS WHENEVER THE USER NAMES A FOLDER INSTEAD OF TYPING A PATH.
+        The name they say ("Bot testing") is not a path — this tool is how you turn it into one.
+        Do not ask the user to re-type a path they already saved, and do not guess a path from
+        the preset's name; look it up here first.
+
+        Returns a mapping of preset name → paths:
+            {"Bot testing": {"source": "/Users/me/Photos/inbox",
+                             "destination": "/Users/me/Photos/sorted"}}
+
+        Match the user's wording to a preset name case-insensitively ("bot testing" → "Bot
+        testing"). If several could match, show the names and ask which. If none match, show
+        the names you did find rather than inventing a path.
+
+        The user may override one side while still meaning the preset for the other — e.g.
+        "use my bot testing preset but put results in /tmp/out" means the preset's source with
+        their explicit destination.
         """
         try:
             async with httpx.AsyncClient() as client:
@@ -103,8 +179,8 @@ def register_queries(mcp: FastMCP):
         Analyse my folder — scan a photo folder to see what's inside before sorting.
         Use this to check a folder, see its contents, count photos, list subfolders, and determine if sorting by Date/Location/People would work.
 
-        YOU HAVE FULL ACCESS TO THE USER'S FILESYSTEM VIA THIS TOOL.
-        Do NOT tell the user you cannot access their files — this tool handles it.
+        The scan runs on the user's own machine, so there is no upload step — pass the
+        folder path straight through.
 
         Use this BEFORE start_sorting or start_find_group to:
         1. Show the user what subfolders exist and how many photos each has
@@ -130,9 +206,13 @@ def register_queries(mcp: FastMCP):
         - If locations is empty → warn: Location sort will put everything in Unknown_Location/
         - Use subfolders[].path values directly as entries in ignore_list for start_sorting
         """
-        normalized_source = os.path.expanduser(source_folder or "")
-        if not normalized_source or not os.path.isdir(normalized_source):
-            return {"error": f"Source path is not a valid directory: {normalized_source}"}
+        # Accepts a saved preset NAME here as well as a path. This is step 1 of the
+        # mandatory sort/find workflow, so a preset name has to work here or the whole
+        # flow stalls on its first call. See resolve_path_preset.
+        resolved_source = await resolve_path_preset(source_folder, "source")
+        if "error" in resolved_source:
+            return resolved_source
+        normalized_source = resolved_source["path"]
 
         ignore_set = set(ignore_list) if ignore_list else set()
 

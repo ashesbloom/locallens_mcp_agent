@@ -107,6 +107,33 @@ locallens_tray_entrypoint.py   # PyInstaller entrypoint for tray app
 - **Job polling** — `_wait_for_completion()` in actions.py handles stale-state guards, min 0.5s poll interval
 - **Version** — bump `MCP_VERSION` in `updater.py` on every release (currently `"1.0.0"`)
 
+## Trace before you change (MANDATORY)
+
+Before editing any **prompt text** or **core application behavior**, establish and state
+all three of these. If you cannot answer all three, you are not ready to edit:
+
+1. **Why is this here?** — trace the origin: `git log -S'<exact phrase>'`, `docs/`,
+   `for LLM's/`, `for dev/`
+2. **What is its purpose?** — which documented behavior or acceptance test does it serve?
+3. **What breaks if I remove it?** — name the specific test or behavior, not a guess
+
+**LLM-facing prose IS application behavior.** The `instructions=` string in `main.py` and
+every `@mcp.tool()` docstring are shipped to the MCP client and are pinned by
+`docs/TESTING.md` — a behavioral acceptance suite (15 mainline + 14 Windows tests, each
+with `✅ Expected` / `❌ Fail if`). They are not comments and are not free to tidy.
+Real example: `docs/TESTING.md` Test 9 expects the assistant to say *"I'll copy to keep
+your originals safe."* That sentence exists in exactly one place — the `Tell user:` clause
+in the `start_sorting` docstring. Rewriting the block for tone deleted it and silently
+broke Test 9.
+
+Reading order before touching prose: `docs/TESTING.md` → `for LLM's/README.md` →
+the relevant `for LLM's/tool_cards/<tool>.md`. Note `for LLM's/` is gitignored and stale
+(dated Jul 6, documents 14 tools against today's 26) — treat it as history, not spec.
+
+**Undo safety.** `git checkout -- <file>` reverts to HEAD, which in this repo routinely
+discards uncommitted work from *prior sessions*. It is not an undo for your own edits —
+revert those surgically. Never `rm` an untracked file; git cannot restore it.
+
 ## Key Environment Variables
 
 | Variable | Purpose |

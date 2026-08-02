@@ -1,19 +1,33 @@
 {
   "mcp": {
-    "latest": "1.0.30",
+    "latest": "1.0.31",
     "min_supported": "1.0.0",
     "release_notes_url": "https://github.com/ashesbloom/locallens_mcp_agent/releases/latest",
     "downloads": {
       "macos-arm64": {
-        "url": "https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v1.0.30/locallens-agent-v1.0.30-macos-arm64.dmg",
-        "sha256": "4aaac55561a7a6ea3a68f1bf9282486393f4977265d73896680895cd43593cae"
+        "url": "https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v1.0.31/locallens-agent-v1.0.31-macos-arm64.dmg",
+        "sha256": ""
       },
       "windows-x86_64": {
-        "url": "https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v1.0.30/locallens-agent-v1.0.30-windows-x86_64-setup.exe",
-        "sha256": "45a537f904d24d738178ea61725ffed66236775022c97cc9e6bfc82858c02b93"
+        "url": "https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v1.0.31/locallens-agent-v1.0.31-windows-x86_64-setup.exe",
+        "sha256": ""
       }
     },
     "changelog": [
+      {
+        "version": "1.0.31",
+        "date": "August 2026",
+        "highlights": [
+          "Concurrent job guard — blocks a second sort/find if a job is already running",
+          "Destination path validation with opt-in creation (create_destination=True)",
+          "Enrolled-face count fix — reads enrolled_faces key correctly from backend payload",
+          "Daemon lifecycle overhaul — no more backend clones, SIGTERM stop, PID-file-based control",
+          "Preset path resolution — resolve_path_preset maps preset names to real paths",
+          "File-count cross-check — flags total_files vs scanned-file mismatches in status",
+          "Trimmed MCP system instructions to survive client truncation; safety rules now first",
+          "Six new test files covering all new helpers (153 tests total)"
+        ]
+      },
       {
         "version": "1.0.30",
         "date": "July 2026",

@@ -1,4 +1,5 @@
 import asyncio
+import os
 import httpx
 from mcp.server.fastmcp import FastMCP
 from typing import Dict, Any, Optional
@@ -6,6 +7,100 @@ from typing import Dict, Any, Optional
 from ..config import get_locallens_url
 from ..license import get_license_info
 from ..updater import check_for_updates
+from .queries import SUPPORTED_EXTENSIONS
+
+# How far the backend's total_files may exceed our own count before we flag it.
+# Absorbs ordinary drift (a file added or removed between the backend's count and
+# ours) while still catching the real failure, which is off by hundreds.
+_COUNT_MISMATCH_TOLERANCE = 5
+
+
+def _expected_file_count(source_folder: Any, ignore_list: Any) -> Optional[int]:
+    """
+    Counts supported images under source_folder, honouring ignore_list properly.
+
+    This is what the backend's total_files *should* be. It exists because the backend
+    prunes nothing: its walk skips only files sitting directly inside an ignored folder
+    and still descends into that folder's children. Sorted output always nests
+    (Sorted_By_People/Mayank/...), so the ignored folders hold zero direct files and the
+    filter excludes nothing — a 75-file job reported 680.
+
+    Returns None when the folder can't be scanned. Callers MUST treat None as "could not
+    check" and stay silent, never as a mismatch.
+    """
+    if not isinstance(source_folder, str) or not source_folder:
+        return None
+    if not isinstance(ignore_list, list):
+        return None
+
+    root = os.path.expanduser(source_folder)
+    if not os.path.isdir(root):
+        return None
+
+    ignore_set = {
+        os.path.normpath(os.path.expanduser(p))
+        for p in ignore_list if isinstance(p, str) and p
+    }
+
+    count = 0
+    try:
+        for dirpath, dirnames, filenames in os.walk(root):
+            # Prune ignored subtrees in place — the step the backend is missing.
+            # Must be slice assignment: os.walk reads back this same list object to
+            # decide where to descend, so rebinding the name would do nothing.
+            dirnames[:] = [
+                d for d in dirnames
+                if os.path.normpath(os.path.join(dirpath, d)) not in ignore_set
+            ]
+            if os.path.normpath(dirpath) in ignore_set:
+                continue
+            count += sum(
+                1 for f in filenames
+                if f.lower().endswith(SUPPORTED_EXTENSIONS)
+            )
+    except OSError:
+        return None
+    return count
+
+
+def _flag_file_count_mismatch(payload: Any) -> Any:
+    """
+    Annotates a job-status payload whose total_files disagrees with a local count.
+
+    Without this the model is handed "75 files will be scanned" and then
+    "total_files: 680" with no way to reconcile them, and fills the gap with a
+    confident invention — it claimed total_files was measured before the ignore
+    filter ran, which is not true of any code path. Naming the contradiction
+    removes the need to guess at it.
+
+    Only the over-count direction is flagged: that is the ignore-list failure
+    signature. Under-counting means something else and is not this check's job.
+    """
+    if not isinstance(payload, dict):
+        return payload
+
+    reported = payload.get("total_files")
+    if not isinstance(reported, int) or isinstance(reported, bool):
+        return payload
+
+    source = payload.get("source_folder")
+    expected = _expected_file_count(source, payload.get("ignore_list"))
+    if expected is None or reported - expected <= _COUNT_MISMATCH_TOLERANCE:
+        return payload
+
+    payload["expected_after_ignore"] = expected
+    payload["warning"] = (
+        f"total_files mismatch: the backend reports {reported} files, but {source} "
+        f"holds {expected} once ignore_list is applied. The ignored folders are NOT "
+        "being excluded, so this job is processing already-sorted photos."
+    )
+    payload["guidance"] = (
+        f"Tell the user plainly that the job is scanning {reported} files instead of the "
+        f"{expected} they asked for, and offer abort_job. Do NOT explain the difference "
+        "away — there is no reading of total_files under which these numbers agree. "
+        "Report it as a bug in the ignore list, not as a quirk of the progress readout."
+    )
+    return payload
 
 
 def register_status(mcp: FastMCP):
@@ -205,6 +300,11 @@ def register_status(mcp: FastMCP):
         Check the full progress and context of the current (or most recently completed) job.
         Use when the user asks 'how is it going?', 'is it done yet?', or 'what is being processed?'.
 
+        ⛔ CALL THIS ONCE, WHEN THE USER ASKS — never in a polling loop.
+        A job reporting status="still_running" is healthy and continues in the background on its
+        own. Report the progress you have and STOP. Repeated polling costs the user tokens and
+        changes nothing; check again only when the user next asks.
+
         Response fields (all fields persist after completion so you can still read the last job):
 
         Core status:
@@ -233,15 +333,21 @@ def register_status(mcp: FastMCP):
           — null if no filters (which would match all photos)
 
         File scope:
-        - total_files (int): Total supported image files found in source_folder,
-          after applying ignore_list — this is the exact count the job processes
+        - total_files (int): The backend's own count of files this job will process.
+          Trust it only when no "warning" field is present — see below.
         - ignore_list (list): Subfolders excluded from this job
+        - expected_after_ignore (int, only on mismatch): what source_folder actually holds
+          once ignore_list is applied, counted locally
+        - warning / guidance (str, only on mismatch): present when total_files disagrees
+          with expected_after_ignore. That means the ignored folders are NOT being skipped
+          and the job is re-processing already-sorted photos. Report it to the user and
+          offer abort_job — never rationalise the two numbers into agreement.
         """
         try:
             async with httpx.AsyncClient() as client:
                 r = await client.get(f"{get_locallens_url()}/api/job-status", timeout=5)
                 r.raise_for_status()
-                return r.json()
+                return _flag_file_count_mismatch(r.json())
         except Exception as e:
             return {"error": str(e)}
 

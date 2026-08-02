@@ -21,6 +21,7 @@ import os
 import asyncio
 import time
 import logging
+import signal
 import sys
 import subprocess
 import hashlib
@@ -35,9 +36,10 @@ class EnrollmentEntry(BaseModel):
     person_name: str
     folder_path: str
 
-from ..config import get_locallens_url, get_auth_headers
+from ..config import get_locallens_url, get_auth_headers, get_app_data_dir
 from ..license import require_pro, activate_license, deactivate_license, get_license_info
-from .actions import _wait_for_completion
+from .actions import _DEFAULT_WAIT_S, _reject_if_job_running, _wait_for_completion
+from .queries import resolve_path_preset
 
 # Logger — MUST write only to stderr
 _log = logging.getLogger("locallens_mcp.pro_tools")
@@ -58,128 +60,203 @@ def _handle_error(e: Exception) -> Dict[str, Any]:
     return {"error": str(e)}
 
 
-async def _launch_daemon_silent() -> str:
+async def _daemon_is_running(url: str) -> bool:
+    """Ask the backend whether the scheduler daemon is alive. Source of truth."""
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(f"{url}/api/scheduler/daemon-status", timeout=5.0)
+            r.raise_for_status()
+            return bool(r.json().get("daemon_running"))
+    except Exception:
+        return False
+
+
+async def _poll_daemon_state(url: str, want: bool, cap_s: float = 3.0) -> bool:
+    """Poll daemon-status until it matches `want`, or the cap elapses."""
+    deadline = time.monotonic() + cap_s
+    while True:
+        if await _daemon_is_running(url) is want:
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        await asyncio.sleep(0.5)
+
+
+def _launch_daemon_script() -> str:
     """
-    Launch the scheduler daemon as a silent background process (no terminal window).
-    Opens the web dashboard in the user's browser for monitoring.
-    If daemon is already running (PID file exists + process alive), returns 'already_running'.
+    The only launcher: spawn scheduler_daemon.py directly, detached.
+
+    ponytail: only works against a LocalLens *source* checkout — the frozen backend
+    bundle ships no .py files, so scheduler_daemon.py is absent there. Simplify this
+    to a plain path lookup once scheduler_daemon.py is bundled in backend_server.spec.
+    Do not "fix" the missing-script case by falling back to the backend's
+    daemon-command endpoint; that spawns backend clones (see _ensure_daemon).
     """
     import pathlib
 
-    # Locate daemon script dynamically
-    # 1. Check environment variable (set by user in Claude config)
-    backend_dir_env = os.getenv("LOCALLENS_BACKEND_DIR")
-    
-    # 2. Check config directory (written by LocalLens backend)
-    if sys.platform == "win32":
-        config_dir = pathlib.Path(os.environ.get("APPDATA", "")) / "LocalLens"
-    else:
-        config_dir = pathlib.Path.home() / ".config" / "LocalLens"
-        
-    backend_dir_file = config_dir / "install_dir.txt"
-    
     backend_dir = None
+    backend_dir_env = os.getenv("LOCALLENS_BACKEND_DIR")
     if backend_dir_env:
-        backend_dir = pathlib.Path(backend_dir_env)
-    elif backend_dir_file.exists():
-        try:
-            # Assumes the text file contains the path to the 'backend' folder
-            backend_dir = pathlib.Path(backend_dir_file.read_text().strip())
-        except Exception:
-            pass
+        backend_dir = pathlib.Path(os.path.expanduser(backend_dir_env))
+    else:
+        install_dir_file = get_app_data_dir() / "install_dir.txt"
+        if install_dir_file.exists():
+            try:
+                backend_dir = pathlib.Path(install_dir_file.read_text().strip())
+            except Exception:
+                pass
 
     if not backend_dir or not backend_dir.exists():
-        return "daemon_script_not_found: Could not locate LocalLens backend directory. Please set LOCALLENS_BACKEND_DIR in your environment."
+        return (
+            "backend directory not found — set LOCALLENS_BACKEND_DIR to your LocalLens "
+            "backend folder (the one containing scheduler_daemon.py)"
+        )
 
     daemon_script = backend_dir / "scheduler_daemon.py"
-
     if not daemon_script.exists():
-        return f"daemon_script_not_found:{daemon_script}"
+        return f"scheduler_daemon.py not present at {daemon_script}"
 
-    # Check if already running
-    if sys.platform == "win32":
-        config_dir = pathlib.Path(os.environ.get("APPDATA", "")) / "LocalLens"
-    else:
-        config_dir = pathlib.Path.home() / ".config" / "LocalLens"
-    pid_file = config_dir / "scheduler.pid"
-    if pid_file.exists():
-        try:
-            pid = int(pid_file.read_text().strip())
-            # Check if process is still alive — platform-safe
-            if sys.platform == "win32":
-                # os.kill(pid, 0) crashes on Windows (signal 0 not supported).
-                # Use the Win32 API: OpenProcess returns a handle if alive.
-                import ctypes
-                PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-                handle = ctypes.windll.kernel32.OpenProcess(
-                    PROCESS_QUERY_LIMITED_INFORMATION, False, pid
-                )
-                if handle:
-                    ctypes.windll.kernel32.CloseHandle(handle)
-                    return "already_running"
-                # handle == 0 means process doesn't exist — fall through to cleanup
-            else:
-                os.kill(pid, 0)  # POSIX: signal 0 = check existence
-                return "already_running"
-        except (OSError, ValueError):
-            pass
-        pid_file.unlink(missing_ok=True)
-
-    # Resolve the correct python executable for the backend venv
+    # Prefer the backend's own venv interpreter — it has the deps the daemon imports.
     if sys.platform == "win32":
         backend_python = backend_dir / "venv" / "Scripts" / "python.exe"
     else:
         backend_python = backend_dir / "venv" / "bin" / "python"
-
     python = str(backend_python) if backend_python.exists() else sys.executable
 
+    kwargs: Dict[str, Any] = {
+        "cwd": str(backend_dir),
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+    }
+    if sys.platform == "win32":
+        kwargs["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
+    else:
+        kwargs["start_new_session"] = True  # fully detach from the MCP process
+
     try:
-        # Launch daemon as a detached background process — NO terminal window
-        if sys.platform == "win32":
-            subprocess.Popen(
-                [python, str(daemon_script), "start"],
-                cwd=str(backend_dir),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW,
-            )
-        else:
-            subprocess.Popen(
-                [python, str(daemon_script), "start"],
-                cwd=str(backend_dir),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,  # Fully detach from parent process
-            )
-
-        # Give the daemon a moment to write its PID file, then open the web dashboard
-        await asyncio.sleep(1.0)
-
-        # Read the backend port for the dashboard URL
-        port_file = config_dir / "port.txt"
-        port = 8000
-        if port_file.exists():
-            try:
-                port = int(port_file.read_text().strip())
-            except ValueError:
-                pass
-
-        dashboard_url = f"http://127.0.0.1:{port}/scheduler-ui"
-        if sys.platform == "darwin":
-            subprocess.Popen(["open", dashboard_url])
-        elif sys.platform == "win32":
-            subprocess.Popen(["start", dashboard_url], shell=True)
-        else:
-            for browser_cmd in ["xdg-open", "sensible-browser", "firefox"]:
-                try:
-                    subprocess.Popen([browser_cmd, dashboard_url])
-                    break
-                except FileNotFoundError:
-                    continue
-
-        return "launched"
+        subprocess.Popen([python, str(daemon_script), "start"], **kwargs)
+        return f"spawned {daemon_script}"
     except Exception as ex:
-        return f"launch_failed:{ex}"
+        return f"spawn failed: {ex}"
+
+
+async def _ensure_daemon(url: str, cap_s: float = 3.0) -> Dict[str, Any]:
+    """
+    Make sure the scheduler daemon is running, and report what is actually true.
+
+    Only ever launches a daemon we can name on disk, and the returned `daemon_running`
+    is verified against /api/scheduler/daemon-status — never assumed from a bare spawn.
+
+    Deliberately does NOT call POST /api/scheduler/daemon-command. That endpoint runs
+    [sys.executable, "scheduler_daemon.py", "start"], and in a packaged install
+    sys.executable IS the backend binary — a frozen binary cannot run a .py argument,
+    so it boots a second full backend instead. That clone writes its own port to
+    port.txt, so the next call resolves to the clone and spawns another: observed live
+    as 5 backend servers and a hijacked port.txt. See _stop_daemon for the same reason.
+    """
+    if await _daemon_is_running(url):
+        return {"daemon_running": True, "detail": "already running"}
+
+    spawn_detail = _launch_daemon_script()
+    if await _poll_daemon_state(url, True, cap_s):
+        return {"daemon_running": True, "detail": spawn_detail}
+
+    return {"daemon_running": False, "detail": spawn_detail}
+
+
+async def _stop_daemon(url: str, cap_s: float = 3.0) -> Dict[str, Any]:
+    """
+    Stop the daemon by signalling the PID it recorded, and verify it actually stopped.
+
+    Uses the PID file rather than daemon-command for the reason spelled out in
+    _ensure_daemon — plus the endpoint's stop branch calls a blocking subprocess.run()
+    with no timeout inside an async handler, so a spawned clone that never exits would
+    wedge the backend's event loop. scheduler_daemon.py handles SIGTERM and exits.
+    """
+    pid_file = get_app_data_dir() / "scheduler.pid"
+    if not pid_file.exists():
+        return {
+            "status": "stopped",
+            "daemon_running": False,
+            "note": "The daemon was not running. Schedules remain configured.",
+        }
+
+    try:
+        os.kill(int(pid_file.read_text().strip()), signal.SIGTERM)
+    except (OSError, ValueError) as ex:
+        # Stale PID file, or the process is already gone — either way, not running.
+        return {
+            "status": "stopped",
+            "daemon_running": False,
+            "note": f"The daemon was not running ({ex}). Schedules remain configured.",
+        }
+
+    if await _poll_daemon_state(url, False, cap_s):
+        return {
+            "status": "stopped",
+            "daemon_running": False,
+            "note": "Daemon stopped. Schedules remain configured — use start_daemon to resume.",
+        }
+
+    return {
+        "status": "still_running",
+        "daemon_running": True,
+        "note": (
+            "A stop signal was sent but the daemon is still reporting as running. "
+            "Tell the user it may not have stopped, and offer to try again."
+        ),
+    }
+
+
+def _scheduler_next_actions(url: str, destination_folder: str) -> List[Dict[str, Any]]:
+    """The three follow-ups offered after any schedule is created."""
+    return [
+        {
+            "action": "list_schedules",
+            "label": "📋 Check schedule status",
+            "hint": "Call list_schedules() to see all schedules and daemon state",
+        },
+        {
+            "action": "open_folder",
+            "label": "📂 Open destination folder",
+            "args": {"folder_path": destination_folder},
+        },
+        {
+            "action": "open_scheduler_dashboard",
+            "label": "📊 Open full dashboard",
+            "args": {},
+            "hint": f"Provide this link clearly: [Open Dashboard]({url}/scheduler-ui)",
+        },
+    ]
+
+
+def _schedule_guidance(schedule_id: str, daemon: Dict[str, Any], active_line: str) -> str:
+    """
+    Build the LLM-facing guidance for a freshly created schedule.
+
+    The 'it's running' prose is gated on the VERIFIED daemon state — a saved schedule
+    with a dead daemon organizes nothing, and claiming otherwise misleads the user.
+    """
+    if daemon.get("daemon_running"):
+        return (
+            f"{active_line} "
+            "Tell the user they can check status anytime by saying 'list my schedules', "
+            "manage it with 'pause/resume/delete schedule', or open the full dashboard with "
+            "'open scheduler dashboard' — offer them the dashboard link now so they can "
+            "watch sweeps and manage the schedule from there."
+        )
+    return (
+        f"⚠️ Schedule {schedule_id} is SAVED but is NOT being monitored: the background "
+        f"daemon is not running ({daemon.get('detail', 'unknown reason')}), so no photos "
+        "will be organized yet. Tell the user this plainly — do NOT say the schedule is "
+        "active or that sweeps will happen. Offer to retry with "
+        "manage_schedule(schedule_id='daemon', action='start_daemon'). If that fails too, "
+        "the daemon script is not present on this install — tell them to set "
+        "LOCALLENS_BACKEND_DIR to their LocalLens backend folder and restart. Do NOT tell "
+        "them to start the daemon from the scheduler dashboard — that button cannot start "
+        "it on a packaged install. The dashboard link is still useful for viewing the "
+        "schedule, so you may offer it for that."
+    )
 
 
 
@@ -230,7 +307,7 @@ def register_pro_tools(mcp: FastMCP):
         enrollments: dict,
         wait_for_completion: bool = True,
         poll_interval_s: float = 1.0,
-        timeout_s: int = 900
+        timeout_s: int = _DEFAULT_WAIT_S
     ) -> Dict[str, Any]:
         """
         ⚡ PRO FEATURE — Enroll one or more people into the face recognition system in a single batch.
@@ -242,7 +319,8 @@ def register_pro_tools(mcp: FastMCP):
         - enrollments: Dictionary of {"Person Name": "/path/to/folder"}
         - wait_for_completion: If true, waits until encoding finishes before returning (recommended)
         - poll_interval_s: How often to poll for completion status (default: 1 second)
-        - timeout_s: Max wait time before giving up (default: 900 seconds)
+        - timeout_s: Max wait before handing back with status="still_running" (default: 150s).
+          Do NOT raise it — the MCP client cancels tool calls at ~240s.
         """
         supported_exts = (".jpg", ".jpeg", ".png", ".heic", ".heif", ".webp")
         people_to_enroll = []
@@ -297,6 +375,11 @@ def register_pro_tools(mcp: FastMCP):
 
         try:
             async with httpx.AsyncClient() as client:
+                # Enrollment shares the same single job-status slot as sorting,
+                # so it collides the same way — see _reject_if_job_running.
+                busy = await _reject_if_job_running(client)
+                if busy:
+                    return busy
                 r = await client.post(
                     f"{get_locallens_url()}/api/add-person",
                     json=payload,
@@ -462,12 +545,25 @@ def register_pro_tools(mcp: FastMCP):
         Only NEW photos are processed — already-organized files are never touched.
         The active folder monitor persists across app restarts.
         
+        📁 PATHS — RESOLVE PRESET NAMES FIRST (MANDATORY):
+        If the user names a folder instead of typing a path ("watch my bot testing preset",
+        "my saved paths", "the usual folder"), call get_path_presets BEFORE this tool and pass
+        the EXACT stored path. A preset name is not a path — never guess one from the name, and
+        never ask the user to re-type a path they already saved. A destination the user types
+        explicitly overrides the preset's; the preset still supplies source_folder.
+
         - source_folder: The folder to watch actively for new photos
         - destination_folder: Where organized photos go
         - primary_sort: "Date", "Location", or "People"
         - operation_mode: "copy" (safe, keeps originals) or "move"
         - debounce_seconds: Wait time after last file event before organizing (default: 5)
         """
+        # Accepts a saved preset NAME here as well as a path — see resolve_path_preset.
+        resolved_source = await resolve_path_preset(source_folder, "source")
+        if "error" in resolved_source:
+            return resolved_source
+        source_folder = resolved_source["path"]
+
         config = {
             "mode": "active",
             "source_folder": source_folder,
@@ -486,37 +582,20 @@ def register_pro_tools(mcp: FastMCP):
                 r.raise_for_status()
                 res = r.json()
 
-            daemon_status = await _launch_daemon_silent()
-            res["daemon_launched"] = daemon_status
+            daemon = await _ensure_daemon(url)
+            res["daemon_running"] = daemon["daemon_running"]
+            res["daemon_launched"] = daemon["detail"]
             res["privacy_note"] = (
                 "🔒 Your active folder config is stored locally at ~/.config/LocalLens/schedules.json. "
                 "No data leaves your computer. You can delete it anytime."
             )
             schedule_id = res.get("schedule_id", "")
-            res["next_actions"] = [
-                {
-                    "action": "list_schedules",
-                    "label": "📋 Check schedule status",
-                    "hint": "Call list_schedules() to see all schedules and daemon state",
-                },
-                {
-                    "action": "open_folder",
-                    "label": "📂 Open destination folder",
-                    "args": {"folder_path": destination_folder},
-                },
-                {
-                    "action": "open_scheduler_dashboard",
-                    "label": "📊 Open full dashboard",
-                    "args": {},
-                    "hint": f"Provide this link clearly: [Open Dashboard]({get_locallens_url()}/scheduler-ui)"
-                },
-            ]
-            res["guidance"] = (
+            res["next_actions"] = _scheduler_next_actions(url, destination_folder)
+            res["guidance"] = _schedule_guidance(
+                schedule_id,
+                daemon,
                 f"Active folder created ({schedule_id}). The daemon is watching for new photos "
-                f"in {source_folder} and will organize them automatically. "
-                "Tell the user they can check status anytime by saying 'list my schedules', "
-                "manage it with 'pause/resume/delete schedule', or open the full dashboard with "
-                "'open scheduler dashboard'."
+                f"in {source_folder} and will organize them automatically.",
             )
             return res
         except Exception as e:
@@ -544,6 +623,15 @@ def register_pro_tools(mcp: FastMCP):
         Only NEW photos are processed — already-organized files are never touched.
         The schedule persists across app restarts.
         
+        📁 PATHS — RESOLVE PRESET NAMES FIRST (MANDATORY):
+        If the user names a folder instead of typing a path ("use my bot testing preset",
+        "my saved paths", "the usual folder"), call get_path_presets BEFORE this tool and pass
+        the EXACT stored path. A preset name is not a path — never guess one from the name, and
+        never ask the user to re-type a path they already saved.
+        A destination the user types explicitly overrides the preset's destination; the preset
+        still supplies source_folder. Example: "2h date sort, bot testing preset, output to
+        /tmp/out" → source_folder=<preset's source>, destination_folder="/tmp/out".
+
         - source_folder: The folder to sweep for new photos
         - destination_folder: Where organized photos go
         - primary_sort: "Date", "Location", or "People"
@@ -553,6 +641,12 @@ def register_pro_tools(mcp: FastMCP):
 
         Note: If both intervals are left empty, it defaults to 24 hours.
         """
+        # Accepts a saved preset NAME here as well as a path — see resolve_path_preset.
+        resolved_source = await resolve_path_preset(source_folder, "source")
+        if "error" in resolved_source:
+            return resolved_source
+        source_folder = resolved_source["path"]
+
         # Smart defaulting: if both are None, default to 24h.
         # If one is provided, the other defaults to 0.
         if interval_hours is None and interval_minutes is None:
@@ -581,33 +675,23 @@ def register_pro_tools(mcp: FastMCP):
                 r.raise_for_status()
                 res = r.json()
 
-            # Launch the daemon silently and open web dashboard
-            daemon_status = await _launch_daemon_silent()
+            # Start the daemon and verify it actually came up before saying so.
+            daemon = await _ensure_daemon(url)
 
-            res["daemon_launched"] = daemon_status
+            res["daemon_running"] = daemon["daemon_running"]
+            res["daemon_launched"] = daemon["detail"]
             schedule_id = res.get("schedule_id", "")
             interval_desc = f"{effective_hours}h {effective_minutes}m" if effective_hours else f"{effective_minutes}m"
             res["privacy_note"] = (
                 "🔒 Your schedule config is stored locally at ~/.config/LocalLens/schedules.json. "
                 "No data leaves your computer. You can delete any schedule anytime."
             )
-            res["next_actions"] = [
-                {
-                    "action": "list_schedules",
-                    "label": "📋 Check schedule status",
-                    "hint": "Call list_schedules() to see all schedules and daemon state",
-                },
-                {
-                    "action": "open_folder",
-                    "label": "📂 Open destination folder",
-                    "args": {"folder_path": destination_folder},
-                },
-            ]
-            res["guidance"] = (
+            res["next_actions"] = _scheduler_next_actions(url, destination_folder)
+            res["guidance"] = _schedule_guidance(
+                schedule_id,
+                daemon,
                 f"Schedule created ({schedule_id})! The daemon will sweep every {interval_desc}, "
-                f"organizing new photos from {source_folder} by {primary_sort}. "
-                "Tell the user they can say 'list my schedules' to check status, "
-                "'pause schedule X' to stop, or 'trigger schedule X' for an immediate sweep."
+                f"organizing new photos from {source_folder} by {primary_sort}.",
             )
             return res
         except Exception as e:
@@ -712,7 +796,7 @@ def register_pro_tools(mcp: FastMCP):
             "resume"       — Re-activate a paused schedule
             "delete"       — Permanently remove the schedule config
             "trigger"      — Run an immediate organize sweep right now
-            "start_daemon" — Start the daemon process (opens scheduler dashboard)
+            "start_daemon" — Start the daemon process
             "stop_daemon"  — Stop the daemon process (schedules remain configured)
         
         The scheduler daemon automatically picks up config changes within ~5 seconds.
@@ -721,29 +805,27 @@ def register_pro_tools(mcp: FastMCP):
             url = get_locallens_url()
             async with httpx.AsyncClient() as client:
                 if action == "start_daemon":
-                    daemon_status = await _launch_daemon_silent()
+                    daemon = await _ensure_daemon(url)
+                    if daemon["daemon_running"]:
+                        return {
+                            "status": "running",
+                            "daemon_running": True,
+                            "detail": daemon["detail"],
+                            "note": "The daemon is running — active schedules are being monitored.",
+                        }
                     return {
-                        "status": daemon_status,
-                        "note": "Daemon launch attempted. Check the scheduler dashboard for status."
-                        if daemon_status == "launched"
-                        else f"Daemon was already running." if daemon_status == "already_running"
-                        else f"Launch result: {daemon_status}"
+                        "status": "not_running",
+                        "daemon_running": False,
+                        "detail": daemon["detail"],
+                        "note": (
+                            "The daemon could NOT be started, so no schedules are being monitored. "
+                            "Tell the user plainly and offer the scheduler dashboard, where they "
+                            "can start it manually."
+                        ),
                     }
 
                 elif action == "stop_daemon":
-                    try:
-                        r = await client.post(
-                            f"{url}/api/scheduler/daemon-command",
-                            json={"command": "stop"},
-                            timeout=5.0
-                        )
-                        r.raise_for_status()
-                        return {
-                            "status": "stopped",
-                            "note": "Daemon stop signal sent. Schedules remain configured — use start_daemon to restart."
-                        }
-                    except Exception as e:
-                        return {"error": f"Could not stop daemon: {e}"}
+                    return await _stop_daemon(url)
 
                 elif action == "delete":
                     r = await client.delete(f"{url}/api/scheduler/{schedule_id}", timeout=5.0)

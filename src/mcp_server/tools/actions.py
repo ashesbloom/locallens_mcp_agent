@@ -9,6 +9,7 @@ from typing import Dict, Any, List, Optional
 
 from ..config import get_locallens_url
 from ..license import require_pro
+from .queries import resolve_path_preset
 
 # Suppress noisy httpx request logs from polluting stderr
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -34,6 +35,14 @@ _TERMINAL_STATUSES = frozenset({
 # a zero or negative poll_interval_s (asyncio.sleep(<=0) returns instantly).
 _MIN_POLL_INTERVAL_S = 0.5
 
+# How long a tool blocks waiting for a job before handing back to the LLM.
+# MUST stay well under the MCP client's own request timeout — Claude Desktop
+# cancels a tool call at 240s. The old 900s default was unreachable: every job
+# longer than 4 minutes got cancelled client-side, the wait was orphaned, and the
+# model fell back to polling get_job_progress by hand (5+ round trips of tokens
+# for one sort). Returning early with progress is cheaper and more honest.
+_DEFAULT_WAIT_S = 150
+
 
 def _handle_error(e: Exception) -> Dict[str, Any]:
     if isinstance(e, httpx.HTTPStatusError):
@@ -43,6 +52,99 @@ def _handle_error(e: Exception) -> Dict[str, Any]:
         except ValueError:
             return {"error": response.text}
     return {"error": str(e)}
+
+
+def _count_enrolled(faces_data: Any) -> Optional[int]:
+    """
+    Extracts the enrolled-person count from an /api/enrolled-faces payload.
+
+    Returns None when the payload shape isn't recognized — callers MUST treat that
+    as "could not check", never as zero. Conflating the two is what broke this
+    before: the backend emits `enrolled_faces`, older code probed `faces`/`enrolled`,
+    and the .get() chain fell through to [] on every healthy install, blocking
+    People sorts with a bogus "no faces are enrolled" error.
+    """
+    if isinstance(faces_data, list):
+        return len(faces_data)
+    if isinstance(faces_data, dict):
+        for key in ("enrolled_faces", "faces", "enrolled"):
+            value = faces_data.get(key)
+            if isinstance(value, list):
+                return len(value)
+    return None
+
+
+# Max new directory levels create_destination will make below an existing folder.
+# A legitimate destination sits at most a couple of levels under somewhere real;
+# a deeper chain means the path is malformed or hallucinated.
+_MAX_NEW_DEST_LEVELS = 4
+
+
+def _resolve_destination(
+    destination_folder: str,
+    create: bool
+) -> tuple[Optional[str], Optional[Dict[str, Any]]]:
+    """
+    Validates a destination path, creating it only on explicit opt-in.
+
+    Returns (normalized_path, None) on success, or (None, error_dict) on refusal.
+
+    Existence is NOT a reliable proxy for "the user meant this path" — a path the
+    user typed verbatim may simply not exist yet. So a missing destination is a
+    soft refusal that tells the caller how to proceed: confirm with the user, then
+    retry with create=True. The confirmation is the safety mechanism, not the mkdir.
+    """
+    normalized = os.path.expanduser(destination_folder or "")
+    if not normalized:
+        return None, {"error": "Destination path is empty. Ask the user for a destination."}
+
+    if os.path.isdir(normalized):
+        return normalized, None
+
+    if os.path.exists(normalized):
+        return None, {"error": f"Destination exists but is not a directory: {normalized}"}
+
+    if not create:
+        return None, {
+            "error": f"Destination path does not exist: {destination_folder}",
+            "guidance": (
+                "Do NOT fabricate a different path. If the user explicitly gave you this "
+                "path, confirm it with them ('this folder doesn't exist yet — create it?') "
+                "and retry the SAME call with create_destination=True. If you invented this "
+                "path, use get_path_presets() or ask the user instead."
+            ),
+            "retry_with": "create_destination=True",
+        }
+
+    # Walk up to the nearest existing ancestor, counting the levels we'd create.
+    # Guards against a garbled path (e.g. a typo'd root) spawning a deep bogus tree.
+    ancestor, new_levels = normalized, 0
+    while not os.path.isdir(ancestor):
+        parent = os.path.dirname(ancestor)
+        if parent == ancestor:
+            break
+        ancestor, new_levels = parent, new_levels + 1
+
+    if ancestor == os.path.dirname(ancestor):
+        return None, {
+            "error": f"Refusing to create {normalized}: no existing parent folder. "
+                     "The path is probably misspelled. Confirm it with the user."
+        }
+
+    if new_levels > _MAX_NEW_DEST_LEVELS:
+        return None, {
+            "error": f"Refusing to create {new_levels} nested folders under {ancestor}. "
+                     f"At most {_MAX_NEW_DEST_LEVELS} new levels are allowed — a deeper "
+                     "path usually means it's wrong. Confirm the destination with the user."
+        }
+
+    try:
+        os.makedirs(normalized, exist_ok=True)
+    except OSError as e:
+        return None, {"error": f"Could not create destination {normalized}: {e}"}
+
+    _log.info("Created destination folder: %s", normalized)
+    return normalized, None
 
 
 async def _wait_for_completion(
@@ -83,10 +185,21 @@ async def _wait_for_completion(
         # --- Timeout check (always first) ---
         elapsed = time.monotonic() - start
         if elapsed > timeout_s:
-            _log.warning(f"Wait timed out after {elapsed:.1f}s (limit={timeout_s}s)")
+            _log.warning(f"Stopped waiting after {elapsed:.1f}s (limit={timeout_s}s)")
             return {
-                "status": "timeout",
+                "status": "still_running",
                 "elapsed_seconds": round(elapsed, 1),
+                "progress": last_status.get("progress"),
+                "message": (
+                    f"Still running after {elapsed:.0f}s. This tool stopped waiting so it "
+                    "doesn't hold the conversation open — the job continues in the background."
+                ),
+                "guidance": (
+                    "Report the progress above to the user, then STOP. Do NOT poll in a loop: "
+                    "every get_job_progress call costs the user tokens and the job is unaffected "
+                    "by watching it. Ask if they want you to check again, and only call "
+                    "get_job_progress when they say yes."
+                ),
                 "last_status": last_status
             }
 
@@ -137,6 +250,50 @@ async def _wait_for_completion(
         await asyncio.sleep(safe_interval)
 
 
+async def _reject_if_job_running(client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
+    """
+    Refuses to queue a job while the backend already has one running.
+
+    /api/job-status is a SINGLE GLOBAL SLOT carrying no job id, so a second job makes
+    every later poll ambiguous: _wait_for_completion latches onto whichever job the
+    backend happens to be reporting. That is not theoretical — it announced job A's
+    "380 of 602 complete" as job B's result while B was ~30% through, and both jobs
+    split the same CPU, so each ran at roughly half speed.
+
+    Returns an error dict to hand straight back to the caller, or None when clear.
+
+    Fail-open on an unreachable/unparseable backend: we cannot prove a job is running,
+    and "I could not check" must never be reported as "a job is running". The POST that
+    follows will surface the real connection error with a better message than we can.
+    """
+    try:
+        r = await client.get(f"{get_locallens_url()}/api/job-status", timeout=5)
+        r.raise_for_status()
+        status = r.json()
+    except Exception as e:
+        _log.warning("Could not check for a running job (%s) — proceeding.", e)
+        return None
+
+    if not isinstance(status, dict) or not status.get("is_active"):
+        return None
+
+    return {
+        "error": "job_already_running",
+        "message": (
+            f"A {status.get('job_type') or 'sorting'} job is already running: "
+            f"{status.get('progress', '?')}% of {status.get('total_files', '?')} files, "
+            f"writing to {status.get('destination_folder') or 'an unknown folder'}."
+        ),
+        "guidance": (
+            "Do NOT start another job. LocalLens tracks one job at a time, so a second one "
+            "makes both slower AND makes progress reports unreliable. Tell the user what is "
+            "already running and offer two choices: wait for it (get_job_progress), or "
+            "cancel it (abort_job) and then retry this call."
+        ),
+        "current_job": status,
+    }
+
+
 def register_actions(mcp: FastMCP):
 
     @mcp.tool()
@@ -148,15 +305,16 @@ def register_actions(mcp: FastMCP):
         maintain_hierarchy: bool = False,
         ignore_list: Optional[List[str]] = None,
         operation_mode: str = "copy",
+        create_destination: bool = False,
         wait_for_completion: bool = True,
         poll_interval_s: float = 1.0,
-        timeout_s: int = 900
+        timeout_s: int = _DEFAULT_WAIT_S
     ) -> Dict[str, Any]:
         """
         Trigger photo organization on a specific source directory and output to a destination directory.
 
-        YOU HAVE FULL ACCESS TO THE USER'S FILESYSTEM. Do NOT say you cannot access folders.
-        Just call this tool with the paths the user provides.
+        The sort runs on the user's own machine, so there is no upload step — pass the
+        folder paths straight through.
 
         Parameters:
         - primary_sort: MUST be exactly "Date", "Location", or "People" — NEVER "Faces" or "Face"
@@ -166,8 +324,11 @@ def register_actions(mcp: FastMCP):
             → Otherwise default to "balanced"
         - operation_mode: "copy" (DEFAULT — safe) or "move" (destructive — ONLY if user explicitly asks)
         - maintain_hierarchy: False by default (flattens into sort groups). Set True only if user asks.
-        - wait_for_completion: ALWAYS True (default). Waits for the job to finish so you can
-          report results. Only set False if you have a specific reason to fire-and-forget.
+        - wait_for_completion: leave True (default). Waits up to timeout_s, then returns
+          status="still_running" with the current progress rather than blocking forever.
+          Only set False if you have a specific reason to fire-and-forget.
+        - timeout_s: how long to wait before handing back (default 150s). Do NOT raise it —
+          the MCP client cancels tool calls at ~240s, so a longer wait just gets thrown away.
 
         ⛔ CRITICAL SAFETY RULES FOR LLMs — VIOLATION = DATA LOSS:
         1. NEVER INVENT OR FABRICATE A DESTINATION PATH. Only use:
@@ -175,12 +336,21 @@ def register_actions(mcp: FastMCP):
            - A path returned by get_path_presets()
            Making up paths like "source_sorted_by_X" or "source_output" is FORBIDDEN.
            If user hasn't provided a destination → call get_path_presets() or ASK the user.
+           create_destination: leave False on the first attempt. If the call comes back
+           saying the destination doesn't exist, do NOT switch to a different path —
+           ask the user "that folder doesn't exist yet, create it?" and once they agree,
+           retry the SAME path with create_destination=True. Never set it on the first
+           try, and never set it for a path the user did not type.
         2. operation_mode ALWAYS defaults to "copy". Tell user: "I'll copy to keep originals safe."
            NEVER use "move" unless user EXPLICITLY says "move" / "don't keep copies".
         3. BEFORE calling this, call analyse_folder() first to check for subfolders.
            If subfolders exist → present them and ask which to ignore.
            If no subfolders → proceed directly.
-        4. wait_for_completion defaults to True. The tool will poll and return the final result.
+        4. wait_for_completion defaults to True. If the job outlives timeout_s the tool returns
+           status="still_running" — report that progress to the user and STOP. Do not poll
+           get_job_progress in a loop; it burns the user's tokens and does not speed anything up.
+           Only one job can run at a time — if one is already running this returns
+           error="job_already_running" instead of starting a second.
         5. primary_sort MUST be "Date", "Location", or "People". Code auto-corrects
            "Faces" → "People" but always use the correct value.
 
@@ -189,20 +359,16 @@ def register_actions(mcp: FastMCP):
            and return an error. Tell the user to enroll faces first using add_face_enroll().
         """
         # --- SAFETY GUARD: Validate source exists ---
-        normalized_source = os.path.expanduser(source_folder or "")
-        if not normalized_source or not os.path.isdir(normalized_source):
-            return {"error": f"Source path does not exist or is not a directory: {source_folder}"}
+        # Accepts a saved preset NAME here as well as a path — see resolve_path_preset.
+        resolved_source = await resolve_path_preset(source_folder, "source")
+        if "error" in resolved_source:
+            return resolved_source
+        normalized_source = resolved_source["path"]
 
-        # --- SAFETY GUARD: Validate destination exists ---
-        # CRITICAL: If the destination doesn't exist, the LLM likely fabricated it.
-        # We refuse to create arbitrary paths — the user must provide a real one.
-        normalized_dest = os.path.expanduser(destination_folder or "")
-        if not normalized_dest or not os.path.isdir(normalized_dest):
-            return {
-                "error": f"Destination path does not exist: {destination_folder}. "
-                         "You MUST use a path the user explicitly provided or one from get_path_presets(). "
-                         "NEVER fabricate or invent destination paths. Ask the user for a valid destination."
-            }
+        # --- SAFETY GUARD: Resolve destination (creates only with create_destination=True) ---
+        normalized_dest, dest_error = _resolve_destination(destination_folder, create_destination)
+        if dest_error:
+            return dest_error
 
         # --- SAFETY GUARD: source != destination ---
         if os.path.realpath(normalized_source) == os.path.realpath(normalized_dest):
@@ -230,7 +396,9 @@ def register_actions(mcp: FastMCP):
                     )
                     faces_resp.raise_for_status()
                     faces_data = faces_resp.json()
-                    enrolled_count = len(faces_data.get("faces", faces_data.get("enrolled", [])))
+                    # None = payload shape unrecognized → treat as "unknown", not zero,
+                    # and let the sort proceed (same policy as the except branch below).
+                    enrolled_count = _count_enrolled(faces_data)
                     if enrolled_count == 0:
                         return {
                             "error": "no_enrolled_faces",
@@ -271,6 +439,10 @@ def register_actions(mcp: FastMCP):
 
         try:
             async with httpx.AsyncClient() as client:
+                # One job at a time — see _reject_if_job_running for why.
+                busy = await _reject_if_job_running(client)
+                if busy:
+                    return busy
                 r = await client.post(
                     f"{get_locallens_url()}/api/start-sorting",
                     json=payload,
@@ -317,9 +489,10 @@ def register_actions(mcp: FastMCP):
         people: Optional[List[str]] = None,
         face_mode: Optional[str] = "balanced",
         ignore_list: Optional[List[str]] = None,
+        create_destination: bool = False,
         wait_for_completion: bool = True,
         poll_interval_s: float = 1.0,
-        timeout_s: int = 900
+        timeout_s: int = _DEFAULT_WAIT_S
     ) -> Dict[str, Any]:
         """
         Find and extract photos matching specific criteria (people + locations + dates).
@@ -344,6 +517,11 @@ def register_actions(mcp: FastMCP):
         - destination_folder: ONLY use paths the user explicitly provided or from get_path_presets()
         - folder_name: ONLY use the name the user provided. If user didn't specify a name → ASK them.
           NEVER fabricate names like "Mayank_Lucknow" or "Results_2024"
+        - create_destination: leave False on the first attempt. If the call reports the
+          destination doesn't exist, do NOT substitute another path — ask the user
+          "that folder doesn't exist yet, create it?" and retry the SAME path with
+          create_destination=True once they agree. This creates the PARENT only;
+          folder_name is created by the backend either way.
 
         MANDATORY WORKFLOW:
         1. Call analyse_folder(source_folder) FIRST to get exact location strings and people names
@@ -366,19 +544,20 @@ def register_actions(mcp: FastMCP):
         This tool ALWAYS copies (never moves). Originals are always safe.
         """
         # --- SAFETY GUARD: Validate source ---
-        normalized_source = os.path.expanduser(source_folder or "")
-        if not normalized_source or not os.path.isdir(normalized_source):
-            return {"error": f"Source path does not exist or is not a directory: {source_folder}"}
+        # Accepts a saved preset NAME here as well as a path — see resolve_path_preset.
+        resolved_source = await resolve_path_preset(source_folder, "source")
+        if "error" in resolved_source:
+            return resolved_source
+        normalized_source = resolved_source["path"]
 
-        # --- SAFETY GUARD: Validate destination exists ---
-        normalized_dest = os.path.expanduser(destination_folder or "")
-        if not normalized_dest or not os.path.isdir(normalized_dest):
-            return {
-                "error": f"Destination path does not exist: {destination_folder}. "
-                         "NEVER fabricate paths. Use get_path_presets() or ask the user. "
-                         "Remember: destination_folder is the PARENT directory. "
-                         "folder_name is the subfolder that will be CREATED inside it."
-            }
+        # --- SAFETY GUARD: Resolve destination parent (folder_name is created by the backend) ---
+        normalized_dest, dest_error = _resolve_destination(destination_folder, create_destination)
+        if dest_error:
+            dest_error["reminder"] = (
+                "destination_folder is the PARENT directory. "
+                "folder_name is the subfolder created inside it — do not merge them."
+            )
+            return dest_error
 
         payload = {
             "source_folder": normalized_source,
@@ -399,6 +578,10 @@ def register_actions(mcp: FastMCP):
 
         try:
             async with httpx.AsyncClient() as client:
+                # One job at a time — see _reject_if_job_running for why.
+                busy = await _reject_if_job_running(client)
+                if busy:
+                    return busy
                 r = await client.post(
                     f"{get_locallens_url()}/api/start-find-group",
                     json=payload,
