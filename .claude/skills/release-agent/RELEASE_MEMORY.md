@@ -73,6 +73,17 @@ stripped the outer fence but never the escapes, so v1.0.16–v1.0.31 all shipped
 literal `` \```bash `` where a code block should be. Everything after the
 `## GitHub Release Note Template` heading is now raw markdown.
 
+### `---` under a text line is a heading, not a rule
+
+v1.0.32 first published with its closing line — *"Built with privacy in mind."* —
+rendered as a large H2. The generator `.strip()`s the template, so the notes file
+ended mid-line, and CI's `cat >>` joined the `---` separator directly beneath that
+text. Markdown reads `---` under a text line as a **setext H2 underline**.
+
+Both ends are fixed (`printf '\n'` in the workflow, a trailing newline from the
+generators). If you ever hand-edit a notes file, keep the blank line before any
+`---`.
+
 ## Free vs Pro — get this right, it has been wrong in public
 
 **Sort by People is FREE.** It runs through `start_sorting`, which carries no
