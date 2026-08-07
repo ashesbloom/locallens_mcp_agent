@@ -38,7 +38,7 @@ import os
 import platform
 import sys
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 from functools import wraps
@@ -262,7 +262,28 @@ def deactivate_license() -> Dict[str, Any]:
     if path.exists():
         path.unlink()
         _log.info("License deactivated — reverted to Free tier.")
-        return {"status": "deactivated", "message": "Pro features have been deactivated."}
+        return {
+            "status": "deactivated",
+            "message": "Pro features have been deactivated. You are on the Free tier.",
+            # Spelled out because an assistant asked to summarise a bare "Pro
+            # deactivated" invented the list — and wrongly told the user that
+            # sorting by People had been switched off. It had not: People sort
+            # runs through start_sorting, which is not Pro-gated.
+            "still_available_free": [
+                "Sort by Date", "Sort by Location", "Sort by People",
+                "Find & Group (including by person)", "See enrolled people",
+                "Analyze folders", "Path presets", "Open folder", "Stats & status",
+            ],
+            "now_locked": [
+                "Batch face enrollment (add_face_enroll)", "Duplicate detection and cleanup",
+                "Export reports", "Smart album suggestions",
+                "Scheduled auto-organize", "Active folders", "Scheduler dashboard",
+            ],
+            "guidance": (
+                "List still_available_free and now_locked exactly as given. Do NOT infer "
+                "which features are gated — sorting by People is FREE and stays working."
+            ),
+        }
     return {"status": "already_free", "message": "No active license found."}
 
 
@@ -270,12 +291,67 @@ def deactivate_license() -> Dict[str, Any]:
 #  Decorator — use on any Pro-only tool
 # ---------------------------------------------------------------------------
 
-_STORE_URL = os.getenv("LOCALLENS_STORE_URL", "https://locallens.app")
-PRO_UPGRADE_MESSAGE = (
-    "This is a Pro feature. "
-    f"To unlock it, purchase a license at {_STORE_URL} "
-    "and activate it with: activate_pro_license(license_key='YOUR-KEY')"
+_STORE_URL = os.getenv("LOCALLENS_STORE_URL", "https://locallensmcp.vercel.app")
+
+# Where "see plans and pricing" points — the pricing page, not a checkout URL.
+# Single definition: tools/status.py imports this rather than defining its own.
+PRICING_URL = os.getenv("LOCALLENS_PRICING_URL", "https://locallensmcp.vercel.app/#pricing")
+
+# How long a user counts as "new" for the purpose of mentioning the website.
+_ONBOARDING_WINDOW_DAYS = 14
+
+# The one rule every surface that names the website must carry. The site is a
+# suggestion for the human, never a source for the assistant: fetching it is how
+# the assistant ended up describing an unrelated product as if it were LocalLens.
+NEVER_BROWSE_NOTE = (
+    "Mention this URL as a suggestion only. Do NOT open, fetch or browse it, and do "
+    "not use anything from it as a source — including our own site. Every LocalLens "
+    "fact you need comes from locallens_help."
 )
+
+
+def is_new_user() -> bool:
+    """
+    True only during a user's first days with LocalLens.
+
+    Gates the *unprompted* website suggestion. A long-time user who explicitly asks
+    about pricing still gets the link — that is answering the question, not touting.
+    Repeating it at every turn for someone already using the app is the nag we avoid.
+
+    Reuses the existing mcp_onboarded.json marker; no new state is written.
+    """
+    try:
+        marker = _get_license_dir() / "mcp_onboarded.json"
+        if not marker.exists():
+            return True  # never onboarded — definitely new
+        stamp = json.loads(marker.read_text(encoding="utf-8")).get("onboarded_at")
+        if not stamp:
+            return False
+        age = datetime.now() - datetime.fromisoformat(stamp)
+        return age < timedelta(days=_ONBOARDING_WINDOW_DAYS)
+    except Exception:
+        return False  # unreadable marker → treat as established, i.e. stay quiet
+
+
+def pro_upgrade_message() -> str:
+    """
+    Shown when a Free user hits a Pro-gated tool.
+
+    Leads with the in-app action; the website is a trailing suggestion, and only
+    while the user is new. Never states a price — that is what the page is for.
+    """
+    base = (
+        "This is a Pro feature. Unlock it from the LocalLens tray menu → Plan, "
+        "or with activate_pro_license(license_key='YOUR-KEY') if you already have a key."
+    )
+    if is_new_user():
+        return f"{base} You can also see plans at {PRICING_URL}. {NEVER_BROWSE_NOTE}"
+    return base
+
+
+# Kept as a module constant for src/llm_connector/tool_registry.py, which imports it
+# directly. Prefer pro_upgrade_message() — it is onboarding-aware.
+PRO_UPGRADE_MESSAGE = pro_upgrade_message()
 
 
 def require_pro(func: Callable) -> Callable:
@@ -290,7 +366,7 @@ def require_pro(func: Callable) -> Callable:
             return {
                 "error": "pro_required",
                 "tool": func.__name__,
-                "message": PRO_UPGRADE_MESSAGE,
+                "message": pro_upgrade_message(),
             }
         return await func(*args, **kwargs)
     return wrapper

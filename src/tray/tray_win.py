@@ -28,6 +28,7 @@ from .actions import (
     get_claude_connection_state, maybe_show_welcome, show_help_tips,
     check_updates_now, open_url, copy_to_clipboard,
     get_current_app_info, install_mcp_update, format_download_progress,
+    get_pricing_url,
     CLAUDE_CUSTOM_INSTRUCTIONS, CLAUDE_INSTRUCTIONS_HOWTO,
     STATUS_OFF, STATUS_STARTING, STATUS_ON, STATUS_EXTERNAL, STATUS_ALERT,
 )
@@ -562,6 +563,42 @@ def on_check_updates(icon, item):
     threading.Thread(target=_check_bg, daemon=True).start()
 
 
+def on_plan(icon, item):
+    """
+    License & Plans. The assistant used to point users at a "Settings →
+    License/Plans" screen that did not exist; this is that screen.
+
+    States no price on purpose — the pricing page is the only source for that.
+    """
+    info = _cached_app_info
+    tier = info.get("license_tier", "Free")
+
+    if info.get("license_activated"):
+        activated = info.get("license_activated_at") or "unknown"
+        _msg_box(
+            "License & Plans",
+            f"Plan: {tier}\n"
+            f"Activated: {str(activated)[:10]}\n\n"
+            "Everything is unlocked: batch face enrolment, duplicate detection "
+            "and cleanup, export reports, smart albums, scheduled sweeps and "
+            "active folders.\n\n"
+            "This licence is tied to this machine.",
+        )
+        return
+
+    if _confirm(
+        "License & Plans",
+        "Plan: Free\n\n"
+        "Included now - sort by date, location AND people, find & group, "
+        "folder analysis, saved path presets, stats.\n\n"
+        "Pro adds - batch face enrolment, duplicate detection and cleanup, "
+        "export reports, smart albums, scheduled sweeps, active folders.\n\n"
+        "One-time purchase, no subscription.\n\n"
+        "Open the plans and pricing page?",
+    ):
+        open_url(get_pricing_url())
+
+
 def on_update_details(icon, item):
     """Show update details or current version info."""
     def _details_bg():
@@ -694,7 +731,17 @@ def _install_update_bg():
                 "Try updating manually from the releases page.",
                 MB_OK | MB_ICONWARNING,
             )
-    # method == "browser": releases page already opened — no extra alert needed
+    elif result.get("reason"):
+        # The dialog promised a silent background install and the download then
+        # failed — without this the user just gets an unexplained browser tab.
+        # No alert when there is no reason: that path already told them the
+        # download page would open.
+        _msg_box(
+            "Automatic Update Failed",
+            f"Could not download v{latest} ({result['reason']}).\n\n"
+            "The releases page has been opened — install it manually from there.",
+            MB_OK | MB_ICONWARNING,
+        )
 
 
 def on_install_update(icon, item):
@@ -755,7 +802,7 @@ def run_win_tray():
     # ── Updates submenu ──────────────────────────────────────────────────
     updates_submenu = pystray.Menu(
         pystray.MenuItem(_info_mcp_title, None, enabled=False),
-        pystray.MenuItem(_info_plan_title, None, enabled=False),
+        pystray.MenuItem(_info_plan_title, on_plan),
         pystray.MenuItem(_info_app_title, None, enabled=False),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Check for Updates", on_check_updates),

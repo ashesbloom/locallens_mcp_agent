@@ -35,9 +35,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://locallens.app"
-Repository = "https://github.com/locallens/locallens-mcp"
-"Bug Tracker" = "https://github.com/locallens/locallens-mcp/issues"
+Homepage = "https://locallensmcp.vercel.app"
+Repository = "https://github.com/ashesbloom/locallens_mcp_agent"
+"Bug Tracker" = "https://github.com/ashesbloom/locallens_mcp_agent/issues"
 
 [project.optional-dependencies]
 chat = [
@@ -63,3 +63,10 @@ locallens-chat = "chat_ui:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+# Test the working tree, not whatever snapshot happens to sit in site-packages.
+# Without this, a non-editable `pip install .` shadows src/ and `pytest tests/`
+# silently validates stale code — locally it was a release behind.
+pythonpath = ["src"]
+testpaths = ["tests"]

@@ -8,8 +8,12 @@ from mcp.server.fastmcp import FastMCP
 from typing import Dict, Any, List, Optional
 
 from ..config import get_locallens_url
-from ..license import require_pro
 from .queries import resolve_path_preset
+
+# NOTE: nothing in this module is @require_pro, and that is deliberate. Sorting —
+# including primary_sort="People" — is FREE. require_pro used to be imported here
+# unused, which reads like an oversight and invites someone to "fix" it by gating
+# start_sorting. Only batch enrolment (add_face_enroll, in pro_tools.py) is Pro.
 
 # Suppress noisy httpx request logs from polluting stderr
 logging.getLogger("httpx").setLevel(logging.WARNING)

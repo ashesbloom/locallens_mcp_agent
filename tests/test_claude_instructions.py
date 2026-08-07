@@ -189,6 +189,95 @@ def test_safety_rules_come_before_routing():
         )
 
 
+# ── locallens.app now serves a different company's product ──────────────────
+#
+# The domain lapsed and now hosts Whistle Enterprise, a meeting-notes tool;
+# https://locallens.app/download 301-redirects to whistle-enterprise.com.
+#
+# Asked "tell me all about Pro licensing", the assistant found no pricing in
+# get_license_status — that tool returns {activated, tier, activated_at} and
+# nothing else — then fell back to the locallens.app URL it had been handed in
+# shipped prose, and described a stranger's product to the user as fact.
+#
+# Two guards, because it took both defects to produce the bug: the domain must
+# not reappear in anything the client receives, and the routing table must send
+# product questions to locallens_help before they can fall through to the web.
+
+_DEAD_DOMAIN = "locallens.app"
+
+
+@pytest.mark.parametrize(
+    "label,text", _SERVER_PROSE, ids=[label for label, _ in _SERVER_PROSE]
+)
+def test_no_dead_domain_in_shipped_prose(label, text):
+    """Never hand a client a URL that resolves to someone else's product."""
+    assert _DEAD_DOMAIN not in text, (
+        f"{label} ships {_DEAD_DOMAIN!r}, which now resolves to Whistle "
+        f"Enterprise — /download 301s to whistle-enterprise.com. The site is "
+        f"https://locallensmcp.vercel.app; changelog and feedback live on GitHub."
+    )
+
+
+def test_pro_questions_route_to_help():
+    """
+    Without this routing line, "what is Pro" lands on get_license_status, which
+    reports tier and date but no features, and the model fills the gap from the web.
+    """
+    text = dict(_SERVER_PROSE)["server instructions"]
+    assert 'locallens_help(topic="pro")' in text, (
+        "the ROUTING block has no pro/pricing/licensing entry, so product "
+        "questions fall through to get_license_status (state only, no features)."
+    )
+
+
+# ── The help tool talked the model out of using it ──────────────────────────
+#
+# Reported twice. v1.0.30's locallens_help docstring ALREADY listed
+# "what's the difference between free and pro?" — and asked for "all about Pro
+# License and Pro and Free Features", the assistant web-searched anyway and
+# described Whistle Enterprise as if it were LocalLens.
+#
+# Keyword triggers were never the missing piece. The docstring opened with
+# "📖 Interactive LocalLens guide" and "⚠️ IMPORTANT: This is an INTERACTIVE
+# GUIDE — do NOT dump the full response… show the user their navigation
+# options." That advertises a MENU. A request for everything about Pro is a
+# request for a manual, so the model went looking for one elsewhere.
+#
+# These guard the reframing: the tool must present as authoritative, and must
+# forbid sourcing LocalLens facts from the web — including our own site, which
+# it must offer as a suggestion rather than fetch.
+
+def _help_description():
+    return dict(_SERVER_PROSE)["locallens_help description"]
+
+
+def test_help_tool_does_not_present_as_a_menu():
+    """A tool that calls itself a menu loses "tell me everything" questions."""
+    desc = _help_description()
+    for phrase in ("Interactive LocalLens guide", "This is an INTERACTIVE GUIDE"):
+        assert phrase not in desc, (
+            f"locallens_help still describes itself as {phrase!r}. That framing is why "
+            f"'all about Pro and Free features' routed to a web search instead."
+        )
+    assert "authoritative" in desc.lower(), (
+        "locallens_help must state it is the authoritative source for LocalLens "
+        "product facts, or the model will look for a more authoritative one."
+    )
+
+
+def test_help_tool_forbids_sourcing_from_the_web():
+    """Including our own site: suggest the URL, never fetch it."""
+    desc = _help_description()
+    assert "not published on the public web" in desc, (
+        "locallens_help must say its facts are not on the public web — otherwise a "
+        "search result about an unrelated product looks like a valid source."
+    )
+    assert "never open or fetch it" in desc, (
+        "locallens_help must forbid fetching the URLs it returns; the site is a "
+        "suggestion for the user, not a source for the assistant."
+    )
+
+
 def test_scheduler_tools_resolve_preset_names():
     """
     The regression from the reported transcript: the user said "use bot testing

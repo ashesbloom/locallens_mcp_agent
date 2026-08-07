@@ -71,6 +71,9 @@ ROUTING (what the user says → tool):
 - auto sort every X hours → schedule_auto_organize; watch this folder → create_active_folder
 - list/pause/stop schedules → list_schedules, manage_schedule, open_scheduler_dashboard
 - what can LocalLens do / LL help / is it private → locallens_help(topic)
+- pro / pricing / licensing / free vs Pro / what do I get → locallens_help(topic="pro")
+  Answer from this tool only. Never search or fetch any site for LocalLens facts,
+  not even ours — suggest the URL to the user instead.
 
 Responses may include a "next_actions" array — present these as natural follow-up options.
 """

@@ -20,10 +20,16 @@ except ImportError:
     _connector_available = False
 
 try:
-    from mcp_server.updater import check_for_updates, check_app_update
+    from mcp_server.updater import check_for_updates, check_app_update, _is_bundled
     _updater_available = True
 except ImportError:
     _updater_available = False
+
+    def _is_bundled() -> bool:
+        """Fallback when mcp_server isn't importable — same rule as updater._is_bundled."""
+        return bool(getattr(sys, "frozen", False)) or any(
+            p.suffix == ".app" for p in Path(sys.executable).parents
+        )
 
 
 def get_claude_connection_state() -> dict:
@@ -89,6 +95,7 @@ def get_current_app_info() -> dict:
     mcp_version = "—"
     license_tier = "Free"
     license_activated = False
+    license_activated_at = None
     app_version = None
 
     if _updater_available:
@@ -103,6 +110,7 @@ def get_current_app_info() -> dict:
         li = get_license_info()
         license_activated = bool(li.get("activated", False))
         license_tier = li.get("tier", "free").capitalize()
+        license_activated_at = li.get("activated_at")
     except Exception:
         pass
 
@@ -116,8 +124,21 @@ def get_current_app_info() -> dict:
         "mcp_version": mcp_version,
         "license_tier": license_tier,
         "license_activated": license_activated,
+        "license_activated_at": license_activated_at,
         "app_version": app_version,
     }
+
+
+def get_pricing_url() -> str:
+    """
+    Pricing page URL. mcp_server.license.PRICING_URL is the single definition;
+    the env fallback keeps the tray working when mcp_server isn't importable.
+    """
+    try:
+        from mcp_server.license import PRICING_URL
+        return PRICING_URL
+    except Exception:
+        return os.getenv("LOCALLENS_PRICING_URL", "https://locallensmcp.vercel.app/#pricing")
 
 
 def format_download_progress(downloaded: int, total: int) -> str:
@@ -160,22 +181,31 @@ def install_mcp_update(
     menu title update. Never raises.
 
     Returns {"method": "silent"|"browser"|"pip", "success": bool, ...}.
+    A browser result carries "reason" only when the silent path was promised
+    to the user and then failed — the trays use its presence to decide whether
+    the surprise browser tab needs explaining.
     """
-    import sys as _sys
     url = release_notes_url or "https://github.com/ashesbloom/locallens_mcp_agent/releases/latest"
+    reason = ""
 
-    if getattr(_sys, "frozen", False):
+    # Not sys.frozen: it is unset when the bundled interpreter is entered as
+    # `python -m ...` (Claude Desktop), which sent bundle users down the pip path.
+    if _is_bundled():
         if download_url and sha256:
             result = _download_and_install(download_url, sha256, progress_cb)
-            if result is not None:
+            if isinstance(result, dict):
                 return result
-            # None = download/verify failed (e.g. offline) — fall back below
+            # str = download/verify failed (e.g. offline) — fall back below
             # rather than leaving the user with no path forward.
+            reason = result
 
         # No signed download info yet, or the silent path failed — open the
         # releases page, user installs manually.
         open_url(url)
-        return {"method": "browser", "success": True, "url": url}
+        out = {"method": "browser", "success": True, "url": url}
+        if reason:
+            out["reason"] = reason
+        return out
 
     # pip / source install — upgrade in-place
     try:
@@ -184,10 +214,10 @@ def install_mcp_update(
             text=True,
             timeout=120,
         )
-        if _sys.platform == "win32":
+        if sys.platform == "win32":
             kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
         result = subprocess.run(
-            [_sys.executable, "-m", "pip", "install", "--upgrade", "locallens-mcp"],
+            [sys.executable, "-m", "pip", "install", "--upgrade", "locallens-mcp"],
             **kwargs,
         )
         if result.returncode == 0:
@@ -202,8 +232,10 @@ def _download_and_install(download_url: str, sha256_expected: str, progress_cb=N
     """
     Download the platform installer/DMG, verify its SHA256, and install it
     silently. Returns a result dict on a definitive outcome (success or a
-    real install failure), or None to tell the caller "give up on the silent
-    path, fall back to the browser" (network error, checksum mismatch).
+    real install failure), or a short reason string telling the caller "give
+    up on the silent path, fall back to the browser" (network error, checksum
+    mismatch). The reason is what the tray shows the user — a browser tab
+    opening after we promised a background install needs explaining.
     """
     import hashlib
     import tempfile
@@ -232,14 +264,14 @@ def _download_and_install(download_url: str, sha256_expected: str, progress_cb=N
         if hasher.hexdigest().lower() != sha256_expected.lower():
             tmp_path.unlink(missing_ok=True)
             print("[LocalLens] Update checksum mismatch — falling back to browser")
-            return None
+            return "checksum mismatch"
     except Exception as exc:
         print(f"[LocalLens] Update download failed ({exc}) — falling back to browser")
         try:
             tmp_path.unlink(missing_ok=True)
         except Exception:
             pass
-        return None
+        return f"download failed: {exc}"
 
     try:
         if sys.platform == "win32":

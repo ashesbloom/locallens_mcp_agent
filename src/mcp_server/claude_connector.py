@@ -50,8 +50,11 @@ _MCP_KEY = "locallens"
 # How many timestamped backups to keep before pruning the oldest
 _MAX_BACKUPS = 5
 
-# The Lemon Squeezy store URL injected as an env var into Claude's config
-_STORE_URL = os.getenv("LOCALLENS_STORE_URL", "https://locallens.lemonsqueezy.com")
+# The store URL injected as an env var into Claude's config.
+# Must match the default in license.py — same env var, so a divergent default
+# means the purchase link differs depending on which code path emitted it.
+_STORE_URL = os.getenv("LOCALLENS_STORE_URL", "https://locallensmcp.vercel.app")
+_PRICING_URL = os.getenv("LOCALLENS_PRICING_URL", "https://locallensmcp.vercel.app/#pricing")
 
 # Current version of this MCP package (mirrors updater.py)
 try:
@@ -272,11 +275,13 @@ def get_mcp_command_config() -> Dict[str, Any]:
         {
           "command": "/path/to/locallens-mcp",  # or "uvx" / "locallens-mcp"
           "args": [],                             # or ["-m", "mcp_server.main"] for bundle
-          "env": { "LOCALLENS_STORE_URL": "..." }
+          "env": { "LOCALLENS_STORE_URL": "...", "LOCALLENS_PRICING_URL": "..." }
         }
     """
     method = detect_install_method()
-    env_block = {"LOCALLENS_STORE_URL": _STORE_URL}
+    # Both are written because this block OVERRIDES the code defaults on an existing
+    # install — a config still carrying an old store URL wins over any change here.
+    env_block = {"LOCALLENS_STORE_URL": _STORE_URL, "LOCALLENS_PRICING_URL": _PRICING_URL}
 
     _log.debug(f"detect_install_method() → {method!r}")
     _log.debug(f"sys.executable = {sys.executable}")

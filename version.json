@@ -183,6 +183,6 @@
   },
   "app": {
     "latest": "1.0.0",
-    "download_url": "https://locallens.app/download"
+    "download_url": "https://locallensmcp.vercel.app/#download"
   }
 }

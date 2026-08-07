@@ -173,7 +173,6 @@ sort '/Users/mayankpandeydk123gmail.com/Bot testing/output' by faces to '/Users/
 **✅ Expected:** Auto-corrects "faces" to "People" (primary_sort="People")
 
 ---
----
 
 # 🚀 Revolutionary Use Case Tests
 

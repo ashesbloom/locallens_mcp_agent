@@ -273,7 +273,7 @@ def register_pro_tools(mcp: FastMCP):
         Activate a Pro license to unlock premium features like duplicate detection,
         face enrollment, scheduled auto-organize, and more.
 
-        Purchase a license at https://locallens.app
+        Purchase a license at https://locallensmcp.vercel.app
         Requires a one-time internet connection. After activation,
         all Pro features work fully offline.
         """
@@ -286,6 +286,10 @@ def register_pro_tools(mcp: FastMCP):
         Use for "my LL license", "am I Pro", "LocalLens subscription", "upgrade status".
         Returns activation state, tier name, and activation date if active.
         No internet required — reads from local cache only.
+
+        ⚠️ This returns license STATE only — no feature list, no pricing. For
+        "what is Pro" / "free vs Pro" / "what do I get", call locallens_help(topic="pro").
+        Never answer LocalLens product questions from the web.
         """
         return get_license_info()
 

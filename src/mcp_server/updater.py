@@ -2,7 +2,7 @@
 LocalLens MCP — Update Checker
 ================================
 Checks the canonical version manifest for a newer MCP version.
-Currently hosted at raw.githubusercontent.com; will move to locallens.app once the website launches.
+Hosted at raw.githubusercontent.com (see VERSION_URL); override with LOCALLENS_VERSION_URL.
 
 Design principles:
   - Silent on failure (network down, timeout, bad JSON) — returns None, never raises
@@ -15,7 +15,7 @@ Version file schema (hosted at raw.githubusercontent.com/ashesbloom/locallens_mc
   "mcp": {
     "latest": "1.1.0",
     "min_supported": "1.0.0",
-    "release_notes_url": "https://locallens.app/changelog",
+    "release_notes_url": "https://github.com/ashesbloom/locallens_mcp_agent/releases/latest",
     "changelog": [
       {
         "version": "1.1.0",
@@ -29,7 +29,7 @@ Version file schema (hosted at raw.githubusercontent.com/ashesbloom/locallens_mc
   },
   "app": {
     "latest": "2.0.0",
-    "download_url": "https://locallens.app/download"
+    "download_url": "https://locallensmcp.vercel.app/#download"
   }
 }
 """
@@ -62,7 +62,7 @@ MCP_VERSION = "1.0.31"
 TTL_HOURS = 24
 
 # Where the canonical version manifest lives.
-# Served from raw.githubusercontent.com until locallens.app is live.
+# Served from raw.githubusercontent.com — the canonical home for the manifest.
 # Override with the LOCALLENS_VERSION_URL env var at any time.
 VERSION_URL = os.getenv(
     "LOCALLENS_VERSION_URL",
@@ -71,6 +71,29 @@ VERSION_URL = os.getenv(
 
 # Local cache file
 _CACHE_FILE = Path.home() / ".config" / "LocalLens" / "mcp_update_cache.json"
+
+
+def _is_bundled() -> bool:
+    """
+    True when running from a packaged app, however it was launched.
+
+    `sys.frozen` alone is NOT enough. py2app sets it inside __boot__.py, but
+    Claude Desktop starts the connector as
+
+        dist/LocalLens Agent.app/Contents/MacOS/python -m mcp_server.main
+
+    which never executes __boot__.py — so sys.frozen stays False for every
+    bundle user and they were told to run `pip install --upgrade locallens-mcp`,
+    a command that cannot work for them.
+
+    Resolving the bundle from sys.executable is the same approach already used
+    by _current_app_bundle() in src/tray/actions.py. PyInstaller (Windows) sets
+    sys.frozen from its bootloader however it is entered, so the .app check
+    covers the only real gap.
+    """
+    if getattr(sys, "frozen", False):
+        return True
+    return any(p.suffix == ".app" for p in Path(sys.executable).parents)
 
 
 def _get_platform_key() -> str:
@@ -113,8 +136,8 @@ def _fetch_version_manifest() -> Optional[Dict[str, Any]]:
     Fetch the version manifest. Checks in order:
       1. Local override file (~/.config/LocalLens/version_override.json)
          — For testing and pre-launch when the website isn't live yet.
-      2. Remote URL (https://locallens.app/version.json)
-         — Production path once the website is deployed.
+      2. Remote URL (VERSION_URL — raw.githubusercontent.com by default)
+         — Production path.
     
     Returns None on any failure (never raises).
     """
@@ -219,6 +242,17 @@ def check_for_updates(force: bool = False) -> Optional[Dict[str, Any]]:
         # release predates the auto-updater or CI hasn't updated the
         # manifest yet — callers fall back to the browser flow in that case.
         download_info = mcp_info.get("downloads", {}).get(_get_platform_key(), {})
+        download_url = download_info.get("url", "")
+        sha256 = download_info.get("sha256", "")
+
+        # Refuse download info that doesn't belong to `latest`. A manifest can
+        # announce a new `latest` while `downloads` still holds the PREVIOUS
+        # release's url+sha (that pair is self-consistent, so the checksum
+        # verifies and the tray silently installs the OLD version) or an empty
+        # sha. Both happened for real — v1.0.30 and v1.0.31 respectively.
+        # Falling back to the browser is the only safe read of that state.
+        if not sha256 or f"v{latest_str}" not in download_url:
+            download_url = sha256 = ""
 
         return {
             "update_available": True,
@@ -227,15 +261,15 @@ def check_for_updates(force: bool = False) -> Optional[Dict[str, Any]]:
             "is_critical": is_critical,
             "highlights": highlights,
             "release_notes_url": mcp_info.get(
-                "release_notes_url", "https://locallens.app/changelog"
+                "release_notes_url", "https://github.com/ashesbloom/locallens_mcp_agent/releases/latest"
             ),
             "upgrade_command": (
-                "Download the latest executable from https://github.com/ashesbloom/locallens_mcp_agent/releases"
-                if getattr(sys, "frozen", False)
+                "Open the LocalLens tray menu → Check for Updates"
+                if _is_bundled()
                 else "pip install --upgrade locallens-mcp"
             ),
-            "download_url": download_info.get("url", ""),
-            "sha256": download_info.get("sha256", ""),
+            "download_url": download_url,
+            "sha256": sha256,
         }
 
     except (InvalidVersion, Exception) as e:
@@ -261,7 +295,7 @@ def check_app_update(installed_version: Optional[str], force: bool = False) -> O
             "update_available": True,
             "current_version": "2.3.0",
             "latest_version": "2.4.0",
-            "download_url": "https://locallens.app/download",
+            "download_url": "https://locallensmcp.vercel.app/#download",
         }
 
     Returns None if installed_version is unknown (backend not running),
@@ -290,7 +324,7 @@ def check_app_update(installed_version: Optional[str], force: bool = False) -> O
             "update_available": True,
             "current_version": installed_version,
             "latest_version": latest_str,
-            "download_url": app_info.get("download_url", "https://locallens.app/download"),
+            "download_url": app_info.get("download_url", "https://locallensmcp.vercel.app/#download"),
         }
 
     except (InvalidVersion, Exception) as e:

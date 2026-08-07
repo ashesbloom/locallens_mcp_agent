@@ -6,7 +6,7 @@
 
 > **Your Photos. Your Machine. Your Rules.**
 
-LocalLens MCP is the AI bridge for [LocalLens](https://locallens.app) — a privacy-first photo organizer that runs 100% on your computer. Connect it to Claude Desktop (or any MCP-compatible AI) and organize, search, and manage your entire photo library using plain English.
+LocalLens MCP is the AI bridge for [LocalLens](https://locallensmcp.vercel.app) — a privacy-first photo organizer that runs 100% on your computer. Connect it to Claude Desktop (or any MCP-compatible AI) and organize, search, and manage your entire photo library using plain English.
 
 **Zero data leaves your machine. Not even metadata.**
 
@@ -48,7 +48,7 @@ brew install ashesbloom/locallens/locallens-agent
 
 ## Prerequisites
 
-1. **LocalLens app** must be installed and running → [Download at locallens.app](https://locallens.app)
+1. **LocalLens app** must be installed and running → [Download](https://locallensmcp.vercel.app/#download)
 2. **Claude Desktop** (or any MCP-compatible client)
 
 ---
@@ -202,7 +202,8 @@ Require an active Pro license (`activate_pro_license`):
 | Find & Group (filter by person + place + date) | ✅ | ✅ |
 | Job progress & abort | ✅ | ✅ |
 | Path memory (remember / forget) | ✅ | ✅ |
-| Face recognition & enrollment | — | ✅ |
+| See who is enrolled for face recognition | ✅ | ✅ |
+| Batch face enrollment (`add_face_enroll`) | — | ✅ |
 | Duplicate detection & cleanup | — | ✅ |
 | Export reports | — | ✅ |
 | Scheduled auto-organize (every N hours) | — | ✅ |
@@ -211,7 +212,7 @@ Require an active Pro license (`activate_pro_license`):
 
 ### Activating Pro
 
-Purchase a license at [locallens.app](https://locallens.app), then activate it in Claude:
+Purchase a license at [locallensmcp.vercel.app](https://locallensmcp.vercel.app), then activate it in Claude:
 
 ```
 activate_pro_license(license_key="YOUR-LICENSE-KEY")

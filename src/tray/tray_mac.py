@@ -9,6 +9,7 @@ from .actions import (
     get_claude_connection_state, maybe_show_welcome, show_help_tips,
     check_updates_now, open_url, copy_to_clipboard,
     get_current_app_info, install_mcp_update, format_download_progress,
+    get_pricing_url,
     CLAUDE_CUSTOM_INSTRUCTIONS, CLAUDE_INSTRUCTIONS_HOWTO,
     STATUS_OFF, STATUS_STARTING, STATUS_ON, STATUS_EXTERNAL, STATUS_ALERT,
 )
@@ -175,7 +176,7 @@ class LocalLensAgentApp(rumps.App):
         # Info labels — always visible, updated by the polling loop every second.
         # No callback makes them non-interactive (display only).
         self.btn_info_mcp = rumps.MenuItem("  ℹ  MCP Agent v…")
-        self.btn_info_plan = rumps.MenuItem("  ℹ  Plan: Free")
+        self.btn_info_plan = rumps.MenuItem("  ℹ  Plan: Free", callback=self.on_plan)
         self.btn_info_app = rumps.MenuItem("  ℹ  LocalLens App: Not Running")
 
         # Action items
@@ -377,6 +378,45 @@ class LocalLensAgentApp(rumps.App):
 
         threading.Thread(target=_check_bg, daemon=True).start()
 
+    def on_plan(self, sender):
+        """
+        License & Plans. The assistant used to tell people to "check Settings →
+        License/Plans", a screen that did not exist; this is that screen.
+
+        Deliberately states no price — the pricing page is the only source for
+        that, and inventing one here is the failure this whole change fixes.
+        """
+        info = _cached_app_info
+        tier = info.get("license_tier", "Free")
+
+        if info.get("license_activated"):
+            activated = info.get("license_activated_at") or "unknown"
+            rumps.alert(
+                "License & Plans",
+                f"Plan: {tier}  ⭐\n"
+                f"Activated: {str(activated)[:10]}\n\n"
+                "Everything is unlocked: batch face enrolment, duplicate detection "
+                "and cleanup, export reports, smart albums, scheduled sweeps and "
+                "active folders.\n\n"
+                "This licence is tied to this machine.",
+                ok="OK",
+            )
+            return
+
+        res = rumps.alert(
+            "License & Plans",
+            "Plan: Free\n\n"
+            "Included now — sort by date, location AND people, find & group, "
+            "folder analysis, saved path presets, stats.\n\n"
+            "Pro adds — batch face enrolment, duplicate detection and cleanup, "
+            "export reports, smart albums, scheduled sweeps, active folders.\n\n"
+            "One-time purchase, no subscription.",
+            ok="See Plans",
+            cancel="Close",
+        )
+        if res == 1:
+            open_url(get_pricing_url())
+
     def on_update_details(self, sender):
         mcp_u = _cached_update_info.get("mcp")
         app_u = _cached_update_info.get("app")
@@ -529,7 +569,16 @@ class LocalLensAgentApp(rumps.App):
                     f"Could not install v{latest} via pip:\n\n{result.get('error', 'Unknown error')}\n\n"
                     "Try updating manually from the releases page.",
                 ))
-        # method == "browser": releases page already opened — no extra alert needed
+        elif result.get("reason"):
+            # The dialog promised a silent background install and the download
+            # then failed — without this the user just gets an unexplained
+            # browser tab. No alert when there is no reason: that path already
+            # told them the download page would open.
+            _pending_alerts.append((
+                "Automatic Update Failed",
+                f"Could not download v{latest} ({result['reason']}).\n\n"
+                "The releases page has been opened — install it manually from there.",
+            ))
 
     def on_open_claude(self, sender):
         open_claude()

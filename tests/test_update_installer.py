@@ -31,36 +31,58 @@ class TestGetPlatformKey:
             assert updater._get_platform_key() == "linux-x86_64"
 
 
+def _manifest(latest="9.9.9", url=None, sha256="abc123"):
+    """Manifest with a downloads block for this platform. url defaults to a
+    correctly-versioned asset for `latest`."""
+    if url is None:
+        url = f"https://example.com/releases/download/v{latest}/agent-v{latest}.dmg"
+    return {
+        "mcp": {
+            "latest": latest,
+            "min_supported": "1.0.0",
+            "changelog": [],
+            "downloads": {updater._get_platform_key(): {"url": url, "sha256": sha256}},
+        }
+    }
+
+
+def _check(manifest):
+    with (
+        patch.object(updater, "_get_manifest", return_value=manifest),
+        patch.object(updater, "MCP_VERSION", "1.0.0"),
+    ):
+        return updater.check_for_updates()
+
+
 class TestCheckForUpdatesDownloadInfo:
     def test_includes_download_url_and_sha256_when_present(self):
-        manifest = {
-            "mcp": {
-                "latest": "9.9.9",
-                "min_supported": "1.0.0",
-                "changelog": [],
-                "downloads": {
-                    updater._get_platform_key(): {
-                        "url": "https://example.com/update.dmg",
-                        "sha256": "abc123",
-                    }
-                },
-            }
-        }
-        with (
-            patch.object(updater, "_get_manifest", return_value=manifest),
-            patch.object(updater, "MCP_VERSION", "1.0.0"),
-        ):
-            result = updater.check_for_updates()
-        assert result["download_url"] == "https://example.com/update.dmg"
+        result = _check(_manifest())
+        assert result["download_url"].endswith("/agent-v9.9.9.dmg")
         assert result["sha256"] == "abc123"
 
     def test_empty_when_downloads_missing(self):
-        manifest = {"mcp": {"latest": "9.9.9", "changelog": []}}
-        with (
-            patch.object(updater, "_get_manifest", return_value=manifest),
-            patch.object(updater, "MCP_VERSION", "1.0.0"),
-        ):
-            result = updater.check_for_updates()
+        result = _check({"mcp": {"latest": "9.9.9", "changelog": []}})
+        assert result["download_url"] == ""
+        assert result["sha256"] == ""
+
+    def test_empty_when_url_is_for_a_different_version(self):
+        """
+        The v1.0.30 shape: `latest` bumped, downloads still pointing at the
+        previous release. Its url+sha pair is self-consistent, so the checksum
+        would VERIFY and the tray would silently install the old version.
+        """
+        result = _check(_manifest(
+            latest="9.9.9",
+            url="https://example.com/releases/download/v9.9.8/agent-v9.9.8.dmg",
+            sha256="a" * 64,
+        ))
+        assert result["update_available"] is True
+        assert result["download_url"] == ""
+        assert result["sha256"] == ""
+
+    def test_empty_when_sha256_is_blank(self):
+        """The v1.0.31 shape: right url, checksum not filled in by CI yet."""
+        result = _check(_manifest(sha256=""))
         assert result["download_url"] == ""
         assert result["sha256"] == ""
 
@@ -78,18 +100,18 @@ def _fake_stream(content: bytes):
 
 
 class TestDownloadAndInstall:
-    def test_checksum_mismatch_returns_none(self, tmp_path):
+    def test_checksum_mismatch_returns_reason(self, tmp_path):
         with (
             patch.object(tempfile, "gettempdir", return_value=str(tmp_path)),
             patch("httpx.stream", return_value=_fake_stream(b"binary data")),
         ):
             result = actions._download_and_install("https://example.com/f.dmg", "0" * 64)
-        assert result is None
+        assert result == "checksum mismatch"
 
-    def test_network_error_returns_none(self):
+    def test_network_error_returns_reason(self):
         with patch("httpx.stream", side_effect=OSError("offline")):
             result = actions._download_and_install("https://example.com/f.dmg", "0" * 64)
-        assert result is None
+        assert "offline" in result
 
     def test_success_calls_macos_installer(self, tmp_path):
         content = b"binary data"
@@ -323,12 +345,15 @@ class TestInstallMcpUpdateFrozenFallback:
         ):
             result = actions.install_mcp_update("1.2.3", "https://example.com/notes", "")
         assert result["method"] == "browser"
+        # No silent install was promised, so the browser tab needs no excuse —
+        # the trays stay quiet when "reason" is absent.
+        assert "reason" not in result
         mock_open.assert_called_once()
 
-    def test_falls_back_to_browser_when_silent_install_returns_none(self):
+    def test_falls_back_to_browser_when_silent_install_fails(self):
         with (
             patch.object(sys, "frozen", True, create=True),
-            patch.object(actions, "_download_and_install", return_value=None),
+            patch.object(actions, "_download_and_install", return_value="checksum mismatch"),
             patch.object(actions, "open_url") as mock_open,
         ):
             result = actions.install_mcp_update(
@@ -336,4 +361,7 @@ class TestInstallMcpUpdateFrozenFallback:
                 download_url="https://example.com/f.dmg", sha256="a" * 64,
             )
         assert result["method"] == "browser"
+        # The user was told it would install in the background — the tray needs
+        # this to explain the browser tab it gets instead.
+        assert result["reason"] == "checksum mismatch"
         mock_open.assert_called_once()
