@@ -15,6 +15,18 @@
     },
     "changelog": [
       {
+        "version": "1.0.32",
+        "date": "August 2026",
+        "highlights": [
+          "License & Plans in the tray menu — your tier, activation date, and exactly what Free and Pro include",
+          "Sort by People is free — corrected everywhere; only batch face enrolment is Pro",
+          "LocalLens questions are answered from the built-in guide, never from a web search",
+          "Update instructions match how you installed — app users get the tray flow, not a pip command",
+          "Updates refuse a mismatched or unverified download instead of silently reinstalling an older build",
+          "All links now point to locallensmcp.vercel.app — the old locallens.app address is no longer ours"
+        ]
+      },
+      {
         "version": "1.0.31",
         "date": "August 2026",
         "highlights": [
