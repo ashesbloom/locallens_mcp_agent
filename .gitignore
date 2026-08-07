@@ -29,9 +29,12 @@ local_api_token.txt
 # IDE / AI agent local settings
 .vscode/
 .idea/
-.claude/
 *.swp
 *.swo
+
+# .claude/ is tracked on purpose — it carries the release agent, which has to
+# travel with the repo. Only the per-machine permission allowlist stays local.
+.claude/settings.local.json
 
 # macOS
 .DS_Store

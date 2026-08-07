@@ -17,8 +17,14 @@ Example:
 Actions performed:
   1. Updates version in pyproject.toml
   2. Updates MCP_VERSION in src/mcp_server/updater.py
-  3. Updates mcp.latest and prepends to mcp.changelog in version.json (Application GUI Release Log)
+  3. Prepends to mcp.changelog in version.json (Application GUI Release Log)
   4. Generates release_notes_v<VERSION>.md (GitHub Release Page Release Notes)
+
+Deliberately NOT updated: mcp.latest in version.json. That field is what every
+installed client polls, so publishing it before the release assets exist leaves
+clients announcing an update they cannot download. CI sets it in the same commit
+as the download URLs + checksums — see the update-version-manifest job in
+.github/workflows/release.yml.
 `);
   process.exit(0);
 }
@@ -32,6 +38,42 @@ if (!/^\d+\.\d+\.\d+.*$/.test(version)) {
 }
 
 const highlights = args.slice(1);
+
+// Highlights may be written "Fixed: …", "Added: …", "Improved: …", "Changed: …".
+// The prefix drives the grouped "What Changed" section on the GitHub release page
+// and is stripped everywhere else — version.json feeds the desktop UI and the
+// assistant, where a bare sentence reads better than a category label.
+// Keep in lockstep with scripts/set_version.py.
+const CATEGORY_ORDER = ['Added', 'Fixed', 'Improved', 'Changed', 'Removed'];
+const PREFIX_RE = /^(Added|Fixed|Improved|Changed|Removed)\s*:\s*/i;
+
+function splitHighlight(text) {
+  const match = text.match(PREFIX_RE);
+  if (!match) return { category: null, text };
+  const category = match[1][0].toUpperCase() + match[1].slice(1).toLowerCase();
+  return { category, text: text.slice(match[0].length).trim() };
+}
+
+function buildReleaseSections(highlightList) {
+  const pairs = highlightList.map(splitHighlight);
+
+  const bullets = pairs.map(p => `- ${p.text}`).join('\n');
+  let sections = `## ✨ Highlights\n\n${bullets}\n`;
+
+  const grouped = {};
+  for (const { category, text } of pairs) {
+    if (category) (grouped[category] = grouped[category] || []).push(text);
+  }
+
+  const present = CATEGORY_ORDER.filter(c => grouped[c]);
+  if (present.length) {
+    const blocks = present.map(c => `### ${c}\n\n${grouped[c].map(t => `- ${t}`).join('\n')}`);
+    sections += `\n---\n\n## 🔧 What Changed\n\n${blocks.join('\n\n')}\n`;
+  }
+
+  return `${sections}\n---`;
+}
+
 if (highlights.length === 0) {
   highlights.push(`LocalLens MCP Agent v${version} release.`);
 }
@@ -68,13 +110,18 @@ const versionJsonPath = path.join(rootDir, 'version.json');
 let newChangelogEntry = null;
 if (fs.existsSync(versionJsonPath)) {
   let versionJsonData = JSON.parse(fs.readFileSync(versionJsonPath, 'utf8'));
-  versionJsonData.mcp.latest = version;
-
+  // mcp.latest is intentionally left alone — CI publishes it alongside the
+  // download URLs and checksums. A changelog entry for a version that is not
+  // yet `latest` is inert: check_for_updates() only reads highlights for the
+  // version it is announcing.
   const existingIdx = versionJsonData.mcp.changelog.findIndex(entry => entry.version === version);
   newChangelogEntry = {
     version: version,
     date: monthYear,
-    highlights: highlights
+    // Prefixes are for the GitHub page's grouped section only. This list is read
+    // by the desktop "What's New" panel and quoted verbatim by the assistant,
+    // where a leading "Fixed:" is noise.
+    highlights: highlights.map(h => splitHighlight(h).text)
   };
 
   if (existingIdx !== -1) {
@@ -84,7 +131,7 @@ if (fs.existsSync(versionJsonPath)) {
   }
 
   fs.writeFileSync(versionJsonPath, JSON.stringify(versionJsonData, null, 2) + '\n', 'utf8');
-  console.log(` ✅ Updated version.json (Application GUI Log) -> latest version: ${version}`);
+  console.log(` ✅ Updated version.json changelog -> v${version} (mcp.latest is published by CI)`);
 } else {
   console.warn(` ⚠️ version.json not found at ${versionJsonPath}`);
 }
@@ -103,13 +150,14 @@ if (fs.existsSync(templatePath)) {
 
   let ghReleaseNotes = template.replace(/{VERSION}/g, `v${version}`);
 
-  const highlightsList = highlights.map(h => `- ${h}`).join('\n');
-  const releaseHeader = `## What's New in v${version}\n\n${highlightsList}\n\n---`;
+  const releaseSections = buildReleaseSections(highlights);
 
-  if (ghReleaseNotes.includes("## What's Included")) {
-    ghReleaseNotes = ghReleaseNotes.replace("## What's Included", `${releaseHeader}\n\n## What's Included`);
+  if (ghReleaseNotes.includes('{RELEASE_SECTIONS}')) {
+    ghReleaseNotes = ghReleaseNotes.replace('{RELEASE_SECTIONS}', releaseSections);
   } else {
-    ghReleaseNotes = `${releaseHeader}\n\n${ghReleaseNotes}`;
+    // Template predates the placeholder — prepend rather than lose the notes.
+    console.warn(' ⚠️ {RELEASE_SECTIONS} not found in template — prepending instead');
+    ghReleaseNotes = `${releaseSections}\n\n${ghReleaseNotes}`;
   }
 
   const releaseNotesFileName = `release_notes_v${version}.md`;

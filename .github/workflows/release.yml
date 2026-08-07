@@ -364,10 +364,19 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────────
 
   update-version-manifest:
-    name: Update version.json with download checksums
+    # Publishes mcp.latest AND the download URLs/checksums in ONE commit.
+    # scripts/set_version.py deliberately no longer touches mcp.latest: when the
+    # release commit bumped it, every installed client saw a new version
+    # announced with the PREVIOUS release's download block for as long as these
+    # builds took (plus up to 24h of client-side manifest cache), so "Install
+    # Update" either 404'd into the browser or — when the stale url+sha pair was
+    # self-consistent — silently reinstalled the old version.
+    name: Publish release notes + version.json (latest + checksums)
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [build-tray-mac, build-tray-win]
+    # `build` is included so the MCP binaries exist before the release notes
+    # link to them — otherwise the published body 404s for the first few minutes.
+    needs: [build, build-tray-mac, build-tray-win]
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
@@ -399,17 +408,84 @@ jobs:
           echo "mac_sha256=$MAC_SHA" >> $GITHUB_OUTPUT
           echo "win_sha256=$WIN_SHA" >> $GITHUB_OUTPUT
 
+      - name: Publish release notes as the GitHub release body
+        # scripts/set_version.py has generated release_notes/release_notes_v*.md
+        # since v1.0.16 and not one was ever published: no upload step passed
+        # body_path, so `gh release view <tag> --json body` returned "" for every
+        # release. Published from this job rather than the three upload jobs
+        # because those run concurrently and would race for the same body — this
+        # job is already downstream of all of them and already holds the digests.
+        #
+        # Runs BEFORE version.json so no client is offered an update whose
+        # release page is still blank. If it fails, assets are up but mcp.latest
+        # is not advanced — nobody is notified, which is the safe direction.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          NOTES="release_notes/release_notes_v${TAG#v}.md"
+
+          if [ ! -f "$NOTES" ]; then
+            echo "::error::$NOTES not found — run scripts/set_version.py ${TAG#v} before tagging"
+            exit 1
+          fi
+          if grep -qE '\{VERSION\}|\{RELEASE_SECTIONS\}' "$NOTES"; then
+            echo "::error::$NOTES still contains unreplaced template placeholders"
+            exit 1
+          fi
+
+          # Checksums are appended at publish time and never committed — a digest
+          # stored in the repo copy is stale the moment an asset is rebuilt.
+          #
+          # Heredoc bodies MUST stay indented to this block scalar's level: YAML
+          # strips the common indent, so bash still receives them at column 0.
+          # Un-indenting them ends the scalar, and a bare "---" then parses as a
+          # second YAML document.
+          BODY=$(mktemp)
+          cp "$NOTES" "$BODY"
+          cat >> "$BODY" <<'EOF'
+
+          ---
+
+          ## 🔐 Verify your download
+
+          Both installers are unsigned, so it is worth checking the SHA256 before you run them.
+
+          | Asset | SHA256 |
+          |---|---|
+          EOF
+          cat >> "$BODY" <<EOF
+          | \`${{ steps.digests.outputs.mac_asset }}\` | \`${{ steps.digests.outputs.mac_sha256 }}\` |
+          | \`${{ steps.digests.outputs.win_asset }}\` | \`${{ steps.digests.outputs.win_sha256 }}\` |
+          EOF
+          cat >> "$BODY" <<'EOF'
+
+          ```bash
+          shasum -a 256 <file>                 # macOS / Linux
+          certutil -hashfile <file> SHA256     # Windows
+          ```
+          EOF
+
+          gh release edit "$TAG" --notes-file "$BODY"
+          echo "Published release notes for $TAG ($(wc -l < "$BODY") lines)"
+
       - name: Update version.json
         run: |
-          REPO_URL="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}"
-          jq --arg macUrl "$REPO_URL/${{ steps.digests.outputs.mac_asset }}" \
+          TAG="${{ github.ref_name }}"
+          LATEST="${TAG#v}"
+          REPO_URL="https://github.com/${{ github.repository }}/releases/download/$TAG"
+          # latest + downloads in one jq expression: the manifest must never be
+          # readable in a state where they disagree.
+          jq --arg latest "$LATEST" \
+             --arg macUrl "$REPO_URL/${{ steps.digests.outputs.mac_asset }}" \
              --arg macSha "${{ steps.digests.outputs.mac_sha256 }}" \
              --arg winUrl "$REPO_URL/${{ steps.digests.outputs.win_asset }}" \
              --arg winSha "${{ steps.digests.outputs.win_sha256 }}" \
-             '.mcp.downloads = {
-                "macos-arm64": {"url": $macUrl, "sha256": $macSha},
-                "windows-x86_64": {"url": $winUrl, "sha256": $winSha}
-              }' version.json > version.json.tmp
+             '.mcp.latest = $latest
+              | .mcp.downloads = {
+                  "macos-arm64": {"url": $macUrl, "sha256": $macSha},
+                  "windows-x86_64": {"url": $winUrl, "sha256": $winSha}
+                }' version.json > version.json.tmp
           mv version.json.tmp version.json
 
       - name: Commit and push
@@ -417,7 +493,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add version.json
-          git commit -m "chore: update version.json downloads for ${{ github.ref_name }}"
+          git commit -m "chore: publish ${{ github.ref_name }} in version.json (latest + downloads)"
           git push origin HEAD:main
 
   update-homebrew-cask:

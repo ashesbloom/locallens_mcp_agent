@@ -5,144 +5,144 @@ Before pushing a new tag or triggering a new action release build, you MUST:
 1. Always create a release note for both the GitHub release page and the "What's New" in the GUI of the application.
 2. Ensure the GitHub release note follows the official template below, with the correct version numbers updated everywhere (including download URLs).
 
+Two placeholders are substituted by `scripts/set_version.py` (or `set_version.js`):
+
+| Placeholder | Replaced with |
+|---|---|
+| `{VERSION}` | the tag, e.g. `v1.0.32` |
+| `{RELEASE_SECTIONS}` | `## ✨ Highlights` from the CLI args, plus a grouped `## 🔧 What Changed` when highlights are prefixed `Fixed:` / `Added:` / `Improved:` / `Changed:` |
+
+The SHA256 **Verify your download** block is appended by CI at publish time
+(`update-version-manifest` in `.github/workflows/release.yml`) — never commit
+checksums here, they would be stale by definition.
+
+Everything after the heading below is the template. It is deliberately NOT
+wrapped in a fenced code block: an outer fence forces every inner fence to be
+escaped, and the escapes survived into the generated file, so v1.0.16 through
+v1.0.31 all carry literal `\`\`\`bash` where a code block should be.
+
 ## GitHub Release Note Template
 
-```markdown
-**The first public release of LocalLens MCP Agent — your AI-powered bridge to privacy-first photo organization.**
+# LocalLens Agent {VERSION}
 
-LocalLens MCP Agent connects Claude Desktop (or any MCP-compatible AI assistant) to your local [LocalLens](https://locallens.app) photo organizer. Everything runs on your machine. Zero data leaves your device.
+**Organize your photo library by talking to Claude. Everything runs on your machine — no uploads, no cloud, not even metadata.**
 
----
+LocalLens MCP Agent connects Claude Desktop (or any MCP-compatible AI assistant) to your local [LocalLens](https://locallensmcp.vercel.app) photo organizer.
 
-## What's Included
+{RELEASE_SECTIONS}
 
-- **macOS Menu Bar App** — Native tray app for Apple Silicon with one-click Claude Desktop integration
-- **MCP Server Binaries** — Standalone binaries for macOS (arm64), Windows (x64), and Linux (x64)
-- **16 Free Tools** — Full photo organization capabilities out of the box
-- **10 Pro Tools** — Advanced features for power users (requires Pro license)
+## 📦 Install
 
----
+### macOS — Homebrew (recommended)
 
-## Downloads
-
-| Platform | File | Type |
-|----------|------|------|
-| macOS (Apple Silicon) | [locallens-agent-macos-arm64.dmg](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/{VERSION}/locallens-agent-{VERSION}-macos-arm64.dmg) | Menu Bar App |
-| macOS (Apple Silicon) | [locallens-mcp-macos-arm64.zip](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/{VERSION}/locallens-mcp-{VERSION}-macos-arm64.zip) | MCP Binary |
-| Windows (x64) | [locallens-mcp-windows-x86_64.zip](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/{VERSION}/locallens-mcp-{VERSION}-windows-x86_64.zip) | MCP Binary |
-| Linux (x64) | [locallens-mcp-linux-x86_64.tar.gz](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/{VERSION}/locallens-mcp-{VERSION}-linux-x86_64.tar.gz) | MCP Binary |
-
----
-
-## Installation
-
-### macOS — Homebrew (Recommended)
-
-\`\`\`bash
+```bash
 brew install ashesbloom/locallens/locallens-agent
-\`\`\`
+```
 
-The menu bar app will be available in your Applications folder.
+Homebrew clears Gatekeeper for you — there is nothing else to run. Launch **LocalLens Agent** from Applications and look for the `LL` icon in your menu bar.
 
 ### macOS — DMG
 
-**Fix Gatekeeper (required for unsigned apps):**
-  - Run  in terminal:
-     \`\`\`bash
-     xattr -cr "/Applications/LocalLens Agent.app" && codesign --force --deep --sign - "/Applications/LocalLens Agent.app"
-     \`\`\`
+1. Download [`locallens-agent-{VERSION}-macos-arm64.dmg`](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/{VERSION}/locallens-agent-{VERSION}-macos-arm64.dmg)
+2. Open it and drag **LocalLens Agent** to Applications
+3. Clear Gatekeeper — the app is not yet notarized by Apple, so macOS will say it is damaged or from an unidentified developer until you do this:
 
-1. Download `locallens-agent-{VERSION}-macos-arm64.dmg`
-2. Open the DMG and drag **LocalLens Agent** to Applications
-3. Run the included **Fix LocalLens Agent.command** to clear macOS Gatekeeper
-4. Launch from Applications — look for the `LL` icon in your menu bar
+   Double-click the **Fix LocalLens Agent.command** file included in the DMG, or run this once in Terminal:
 
-### macOS / Linux — MCP Binary
+   ```bash
+   xattr -cr "/Applications/LocalLens Agent.app" && codesign --force --deep --sign - "/Applications/LocalLens Agent.app"
+   ```
 
-\`\`\`bash
-# Extract and set up
-tar -xzf locallens-mcp-{VERSION}-macos-arm64.tar.gz   # or .zip on macOS
+4. Launch from Applications — the `LL` icon appears in your menu bar
+
+> Prefer Homebrew if you can. It skips this step entirely.
+
+### Windows
+
+1. Download [`locallens-agent-{VERSION}-windows-x86_64-setup.exe`](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/{VERSION}/locallens-agent-{VERSION}-windows-x86_64-setup.exe)
+2. Run it. SmartScreen may warn about an unknown publisher — choose **More info → Run anyway**
+3. The tray icon appears in your notification area
+
+### MCP binary only (macOS / Linux / Windows)
+
+For running the MCP server without the tray app:
+
+```bash
+# extract the archive for your platform, then:
 ./locallens-mcp --setup-claude
+```
 
-# Restart Claude Desktop to activate
-\`\`\`
-
-### Windows — MCP Binary
-
-\`\`\`powershell
-# Extract the zip, then run:
-.\locallens-mcp.exe --setup-claude
-
-# Restart Claude Desktop to activate
-\`\`\`
+On Windows that is `.\locallens-mcp.exe --setup-claude`. Restart Claude Desktop to activate.
 
 ---
 
-## Features
+## ⬆️ Already have LocalLens Agent?
 
-### Free Tools
-No license required — start organizing immediately:
+Open the **LocalLens tray menu → Check for Updates → Install Update**. It downloads, verifies the checksum and installs for you.
 
-| Tool | Description |
-|------|-------------|
-| `check_app_status` | Verify LocalLens backend is running |
-| `get_stats` | View your photo library statistics |
-| `analyse_folder` | Scan and analyze any photo folder |
-| `start_sorting` | Organize photos by date, location, or people |
-| `start_find_group` | Find and group similar photos |
-| `get_enrolled_faces` | List recognized people in your library |
-| `get_path_presets` | View saved folder presets |
-| `remember_paths` / `forget_paths` | Manage folder presets |
-| `get_job_progress` | Monitor running organization jobs |
-| `abort_job` | Cancel a running job |
-| `open_folder` | Open organized folders in Finder/Explorer |
-| `locallens_help` | Get help and documentation |
-| `activate_pro_license` | Activate a Pro license |
-| `get_license_status` | Check current license status |
-| `revoke_pro_license` | Deactivate Pro license |
+Homebrew users can instead run:
 
-### Pro Tools
-Unlock with a [Pro license](https://locallens.app):
+```bash
+brew upgrade --cask locallens-agent
+```
 
-| Tool | Description |
-|------|-------------|
-| `add_face_enroll` | Teach LocalLens to recognize new people |
-| `find_duplicates` | Detect duplicate photos across folders |
-| `delete_duplicates` | Safely remove duplicate files |
-| `export_report` | Generate organization reports |
-| `schedule_auto_organize` | Set up recurring organization jobs |
-| `create_active_folder` | Create watched folders for auto-import |
-| `list_schedules` | View all scheduled jobs |
-| `manage_schedule` | Edit or delete schedules |
-| `open_scheduler_dashboard` | Access the scheduler UI |
-| `smart_album_suggestions` | Get AI-powered album recommendations |
+> Installed from source or pip? `pip install --upgrade locallens-mcp`.
 
 ---
 
-## Prerequisites
+## 🔑 Free vs Pro
 
-1. **LocalLens Desktop App** — Download from [locallens.app](https://locallens.app)
-2. **Claude Desktop** — Or any MCP-compatible AI client
+Free is a complete photo organizer, not a trial.
+
+| | Free | Pro |
+|---|:---:|:---:|
+| Sort by Date | ✅ | ✅ |
+| Sort by Location | ✅ | ✅ |
+| **Sort by People** (face recognition) | ✅ | ✅ |
+| Find & Group — including by person | ✅ | ✅ |
+| See who is enrolled | ✅ | ✅ |
+| Folder analysis, saved path presets, stats | ✅ | ✅ |
+| Batch face enrollment | — | ✅ |
+| Duplicate detection & cleanup | — | ✅ |
+| Export reports | — | ✅ |
+| Smart album suggestions | — | ✅ |
+| Scheduled auto-organize & active folders | — | ✅ |
+
+One-time purchase, no subscription. Upgrade from the **tray menu → Plan**, or see plans at [locallensmcp.vercel.app](https://locallensmcp.vercel.app/#pricing).
+
+Already have a key? Ask Claude: *"activate my pro license"*.
 
 ---
 
-## Getting Started
+## 📥 All downloads
 
-1. Install LocalLens from [locallens.app](https://locallens.app) and run it once
-2. Install LocalLens MCP Agent using your preferred method above
+| Platform | File | Type |
+|---|---|---|
+| macOS (Apple Silicon) | [locallens-agent-{VERSION}-macos-arm64.dmg](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/{VERSION}/locallens-agent-{VERSION}-macos-arm64.dmg) | Menu Bar App |
+| Windows (x64) | [locallens-agent-{VERSION}-windows-x86_64-setup.exe](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/{VERSION}/locallens-agent-{VERSION}-windows-x86_64-setup.exe) | Installer |
+| macOS (Apple Silicon) | [locallens-mcp-{VERSION}-macos-arm64.zip](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/{VERSION}/locallens-mcp-{VERSION}-macos-arm64.zip) | MCP Binary |
+| Windows (x64) | [locallens-mcp-{VERSION}-windows-x86_64.zip](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/{VERSION}/locallens-mcp-{VERSION}-windows-x86_64.zip) | MCP Binary |
+| Linux (x64) | [locallens-mcp-{VERSION}-linux-x86_64.tar.gz](https://github.com/ashesbloom/locallens_mcp_agent/releases/download/{VERSION}/locallens-mcp-{VERSION}-linux-x86_64.tar.gz) | MCP Binary |
+
+---
+
+## 🚀 Getting started
+
+1. Install the **LocalLens desktop app** and run it once — [download](https://locallensmcp.vercel.app/#download)
+2. Install LocalLens Agent using any method above
 3. Restart Claude Desktop
 4. Ask Claude: *"Check if LocalLens is running"*
 
-You're ready to organize your photos with AI.
+Then try *"What can LocalLens do?"* for a guided tour of all 26 tools.
 
 ---
 
-## Links
+## 🔗 Links
 
-- [LocalLens Website](https://locallens.app)
-- [Report Issues](https://github.com/ashesbloom/locallens_mcp_agent/issues)
+- [Website](https://locallensmcp.vercel.app) · [Plans & pricing](https://locallensmcp.vercel.app/#pricing)
+- [Full tool reference](https://github.com/ashesbloom/locallens_mcp_agent#readme)
+- [Report an issue](https://github.com/ashesbloom/locallens_mcp_agent/issues)
 
 ---
 
-*Built with privacy in mind. Your photos stay on your machine.*
-```
+*Built with privacy in mind. Your photos never leave your machine.*
