@@ -186,7 +186,11 @@ def main():
         release_notes_dir = root_dir / "release_notes"
         release_notes_dir.mkdir(parents=True, exist_ok=True)
         release_notes_path = release_notes_dir / release_notes_filename
-        release_notes_path.write_text(gh_release_notes, encoding="utf-8")
+        # Trailing newline: the template is .strip()ped above, so without this the
+        # file ends mid-line. CI appends a "---" separator to it, and markdown
+        # reads "---" directly under text as a setext H2 underline — the closing
+        # line of v1.0.32's notes shipped as a heading because of it.
+        release_notes_path.write_text(gh_release_notes.rstrip("\n") + "\n", encoding="utf-8")
         print(f" ✅ Generated release_notes/{release_notes_filename} (GitHub Release Page Notes)")
     else:
         print(f" ⚠️ release_notes_template.md not found at {template_path}")

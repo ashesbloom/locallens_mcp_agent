@@ -162,7 +162,11 @@ if (fs.existsSync(templatePath)) {
 
   const releaseNotesFileName = `release_notes_v${version}.md`;
   const releaseNotesPath = path.join(rootDir, 'release_notes', releaseNotesFileName);
-  fs.writeFileSync(releaseNotesPath, ghReleaseNotes, 'utf8');
+  // Trailing newline: the template is trim()ed above, so without this the file
+  // ends mid-line. CI appends a "---" separator to it, and markdown reads "---"
+  // directly under text as a setext H2 underline — the closing line of v1.0.32's
+  // notes shipped as a heading because of it. Keep in lockstep with set_version.py.
+  fs.writeFileSync(releaseNotesPath, ghReleaseNotes.replace(/\n+$/, '') + '\n', 'utf8');
   console.log(` ✅ Generated release_notes/${releaseNotesFileName} (GitHub Release Page Notes)`);
 } else {
   console.warn(` ⚠️ release_notes_template.md not found at ${templatePath}`);

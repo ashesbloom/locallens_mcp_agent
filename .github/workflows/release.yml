@@ -443,6 +443,12 @@ jobs:
           # second YAML document.
           BODY=$(mktemp)
           cp "$NOTES" "$BODY"
+          # Force a trailing blank line before appending. Markdown reads "---"
+          # directly under a text line as a setext H2 underline, so without this
+          # the notes' closing italic line renders as a giant heading. Done here
+          # rather than only in the generator so notes files committed by older
+          # versions of set_version.py are handled too.
+          printf '\n' >> "$BODY"
           cat >> "$BODY" <<'EOF'
 
           ---
