@@ -38,7 +38,7 @@ import os
 import platform
 import sys
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 from functools import wraps
@@ -92,6 +92,52 @@ def _get_machine_id() -> str:
 #  License Cache I/O
 # ---------------------------------------------------------------------------
 
+# How long before expiry we start trying to refresh the licence, and how long
+# a subscriber keeps working after it lapses while we cannot reach the server.
+# The grace exists because the alternative — locking someone out mid-trip on a
+# plane because a renewal could not be confirmed — is a far worse failure than
+# a fortnight of unpaid access.
+_RENEW_WINDOW = timedelta(days=7)
+_OFFLINE_GRACE = timedelta(days=14)
+
+
+def _parse_expiry(value: Any) -> Optional[datetime]:
+    """
+    Parse Lemon Squeezy's `expires_at` into an aware UTC datetime.
+
+    Returns None for null/absent/garbage — and None means *lifetime*, which is
+    the permissive case, so anything unparseable must be logged rather than
+    silently granting forever access.
+    """
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        # fromisoformat only learned to accept "Z" in 3.11; this package
+        # supports 3.10+, so normalise it by hand.
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        _log.warning("Could not parse license expiry %r — treating as lifetime.", value)
+        return None
+    # A naive timestamp from the API is UTC by convention.
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _expiry_from_body(body: Dict[str, Any]) -> Optional[str]:
+    """
+    Pull `expires_at` out of a Lemon Squeezy validate/activate response.
+
+    Shape is `{"valid": true, "license_key": {..., "expires_at": null}}`.
+    Null means a one-time purchase — lifetime. Anything unexpected also
+    resolves to None, which is the permissive reading; erring the other way
+    would lock out a paying customer over a response-shape change.
+    """
+    key = body.get("license_key")
+    if isinstance(key, dict):
+        value = key.get("expires_at")
+        return value if isinstance(value, str) else None
+    return None
+
+
 def _read_cache() -> Optional[Dict[str, Any]]:
     """Read and validate the local license cache. Returns None if invalid."""
     path = _license_path()
@@ -111,8 +157,19 @@ def _read_cache() -> Optional[Dict[str, Any]]:
         return None
 
 
-def _write_cache(license_key: str, tier: str = "pro", instance_id: Optional[str] = None) -> None:
-    """Write a validated license to the local cache."""
+def _write_cache(
+    license_key: str,
+    tier: str = "pro",
+    instance_id: Optional[str] = None,
+    expires_at: Optional[str] = None,
+) -> None:
+    """
+    Write a validated license to the local cache.
+
+    `expires_at` is the subscription period end as Lemon Squeezy reported it.
+    None means a one-time / lifetime key, which never expires and never needs
+    another network call.
+    """
     path = _license_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     data = {
@@ -120,6 +177,7 @@ def _write_cache(license_key: str, tier: str = "pro", instance_id: Optional[str]
         "activated_at": datetime.now().isoformat(),
         "machine_id": _get_machine_id(),
         "tier": tier,
+        "expires_at": expires_at,
     }
     if instance_id:
         data["instance_id"] = instance_id
@@ -132,9 +190,83 @@ def _write_cache(license_key: str, tier: str = "pro", instance_id: Optional[str]
 # ---------------------------------------------------------------------------
 
 def is_pro_active() -> bool:
-    """Check if Pro tier is currently activated on this machine."""
+    """
+    Check if Pro tier is currently active on this machine. Never hits the
+    network — the refresh is a separate, explicit step (see
+    `refresh_license_if_stale`).
+
+    A lifetime key (`expires_at` is None) is active forever, which is what
+    keeps the privacy promise literally true for one-time buyers: they make
+    exactly one network call, ever.
+
+    A subscription stays active until `_OFFLINE_GRACE` past its period end.
+    Without that grace an offline user whose renewal could not be confirmed
+    would be locked out of their own photo library.
+    """
     cache = _read_cache()
-    return cache is not None and cache.get("tier") in {"pro", "personal"}
+    if cache is None or cache.get("tier") not in {"pro", "personal"}:
+        return False
+
+    expiry = _parse_expiry(cache.get("expires_at"))
+    if expiry is None:
+        return True  # lifetime
+
+    return datetime.now(timezone.utc) < expiry + _OFFLINE_GRACE
+
+
+def _needs_refresh(cache: Dict[str, Any]) -> bool:
+    """True when a subscription is inside the renewal window or already past it."""
+    expiry = _parse_expiry(cache.get("expires_at"))
+    if expiry is None:
+        return False  # lifetime keys never re-check
+    return datetime.now(timezone.utc) >= expiry - _RENEW_WINDOW
+
+
+async def refresh_license_if_stale() -> None:
+    """
+    Re-validate a subscription that is near or past its period end, and write
+    the new expiry back.
+
+    Best-effort by design: a failure here is silent, because the grace window
+    in `is_pro_active` is what covers being offline. Called from `require_pro`
+    so it only runs when a Pro tool is actually used.
+    """
+    cache = _read_cache()
+    if cache is None or not _needs_refresh(cache):
+        return
+
+    key = cache.get("license_key")
+    if not key:
+        return
+
+    import httpx
+
+    validate_url, _ = _get_license_endpoints()
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.post(validate_url, json={"license_key": key}, timeout=10)
+            r.raise_for_status()
+            body = r.json()
+    except Exception as e:
+        _log.info("License refresh skipped (%s) — grace period still applies.", e)
+        return
+
+    if not body.get("valid"):
+        # The key was revoked or refunded. Drop the cache so the user reverts
+        # to Free immediately rather than riding out the grace window.
+        _log.info("License is no longer valid upstream — reverting to Free.")
+        path = _license_path()
+        if path.exists():
+            path.unlink()
+        return
+
+    _write_cache(
+        key,
+        cache.get("tier", "pro"),
+        instance_id=cache.get("instance_id"),
+        expires_at=_expiry_from_body(body),
+    )
+    _log.info("License refreshed.")
 
 
 def get_license_info() -> Dict[str, Any]:
@@ -148,6 +280,7 @@ def get_license_info() -> Dict[str, Any]:
             "activated": True,
             "tier": cache["tier"],
             "activated_at": cache.get("activated_at"),
+            "expires_at": cache.get("expires_at"),
             "machine_id": cache.get("machine_id"),
             "instance_id": cache.get("instance_id"),
         }
@@ -178,8 +311,9 @@ async def activate_license(license_key: str) -> Dict[str, Any]:
     Validate a license key against the remote licensing server.
     On success, caches the result locally so future checks are offline.
 
-    This is the ONLY function that requires internet access.
-    After activation, the user never needs to be online again.
+    For a lifetime key this is the only function that ever needs internet — after
+    activation the user need never be online again. Subscriptions are re-validated
+    near their period end by `refresh_license_if_stale`.
 
         Uses the Lemon Squeezy License Validation API by default. Override via:
             - LOCALLENS_LICENSE_URL (base, default https://api.lemonsqueezy.com/v1/licenses)
@@ -233,7 +367,12 @@ async def activate_license(license_key: str) -> Dict[str, Any]:
             if isinstance(activation.get("instance"), dict):
                 instance_id = activation["instance"].get("id")
 
-            _write_cache(license_key, "pro", instance_id=instance_id)
+            _write_cache(
+                license_key,
+                "pro",
+                instance_id=instance_id,
+                expires_at=_expiry_from_body(body),
+            )
             return {
                 "status": "activated",
                 "tier": "pro",
@@ -276,7 +415,7 @@ def deactivate_license() -> Dict[str, Any]:
             ],
             "now_locked": [
                 "Batch face enrollment (add_face_enroll)", "Duplicate detection and cleanup",
-                "Export reports", "Smart album suggestions",
+                "Export reports",
                 "Scheduled auto-organize", "Active folders", "Scheduler dashboard",
             ],
             "guidance": (
@@ -362,6 +501,9 @@ def require_pro(func: Callable) -> Callable:
     """
     @wraps(func)
     async def wrapper(*args, **kwargs) -> Dict[str, Any]:
+        # No-op for lifetime keys and for subscriptions with time left, so the
+        # common case stays entirely offline.
+        await refresh_license_if_stale()
         if not is_pro_active():
             return {
                 "error": "pro_required",

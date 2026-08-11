@@ -21,7 +21,6 @@ Version file schema (hosted at raw.githubusercontent.com/ashesbloom/locallens_mc
         "version": "1.1.0",
         "date": "August 2026",
         "highlights": [
-          "Smart Album Suggestions — now live!",
           "Built-in Chat UI (requires locallens-mcp[chat])"
         ]
       }

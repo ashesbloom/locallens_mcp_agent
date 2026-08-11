@@ -396,7 +396,7 @@ class LocalLensAgentApp(rumps.App):
                 f"Plan: {tier}  ⭐\n"
                 f"Activated: {str(activated)[:10]}\n\n"
                 "Everything is unlocked: batch face enrolment, duplicate detection "
-                "and cleanup, export reports, smart albums, scheduled sweeps and "
+                "and cleanup, export reports, scheduled sweeps and "
                 "active folders.\n\n"
                 "This licence is tied to this machine.",
                 ok="OK",
@@ -409,8 +409,8 @@ class LocalLensAgentApp(rumps.App):
             "Included now — sort by date, location AND people, find & group, "
             "folder analysis, saved path presets, stats.\n\n"
             "Pro adds — batch face enrolment, duplicate detection and cleanup, "
-            "export reports, smart albums, scheduled sweeps, active folders.\n\n"
-            "One-time purchase, no subscription.",
+            "export reports, scheduled sweeps, active folders.\n\n"
+            "Current plans and pricing are on the website.",
             ok="See Plans",
             cancel="Close",
         )

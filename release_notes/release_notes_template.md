@@ -105,10 +105,9 @@ Free is a complete photo organizer, not a trial.
 | Batch face enrollment | — | ✅ |
 | Duplicate detection & cleanup | — | ✅ |
 | Export reports | — | ✅ |
-| Smart album suggestions | — | ✅ |
 | Scheduled auto-organize & active folders | — | ✅ |
 
-One-time purchase, no subscription. Upgrade from the **tray menu → Plan**, or see plans at [locallensmcp.vercel.app](https://locallensmcp.vercel.app/#pricing).
+Upgrade from the **tray menu → Plan**, or see current plans and pricing at [locallensmcp.vercel.app](https://locallensmcp.vercel.app/#pricing).
 
 Already have a key? Ask Claude: *"activate my pro license"*.
 

@@ -38,7 +38,7 @@ person), see enrolled people, folder analysis, saved path presets, open folder,
 stats & status.
 
 **Pro** — batch face enrolment (`add_face_enroll`), duplicate detection, duplicate
-cleanup, export reports, smart album suggestions, scheduled auto-organize, active
+cleanup, export reports, scheduled auto-organize, active
 folders, scheduler dashboard.
 
 > **Sort by People is FREE.** It runs through `start_sorting`, which carries no

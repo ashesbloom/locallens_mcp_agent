@@ -793,7 +793,7 @@ def register_status(mcp: FastMCP):
                 "intro": "This is why LocalLens exists. Not a feature — a principle.",
                 "the_promise": [
                     "🖥️ Everything runs on YOUR machine — AI, sorting, face recognition",
-                    "🌐 Zero internet for any feature (except one-time license activation)",
+                    "🌐 Zero internet for any feature — only license activation (and, for subscriptions, a periodic license check)",
                     "📡 Zero outbound connections — verify with 'lsof -i'",
                     "📂 All data at ~/.config/LocalLens/ — nothing else, nowhere else",
                 ],
@@ -845,15 +845,18 @@ def register_status(mcp: FastMCP):
                 "activated_at": license_info.get("activated_at"),
                 "instance_id": license_info.get("instance_id"),
             }
-            # No price is stated anywhere in this repo. Asserting one would be the exact
-            # failure this tool exists to prevent, so point at the page for the number.
+            # Neither the price nor the billing model is stated here. Both are variable
+            # now — regional bands, and a founding lifetime offer that closes — so
+            # asserting either is the same failure as asserting a price. See
+            # docs/PRICING.md; the pricing page is the only source of truth.
             result["pricing"] = {
-                "model": "One-time purchase — no subscription.",
+                "model": "Plans and current offers are listed on the pricing page.",
                 "primary": "Tray menu → Plan (shows your tier and upgrade options in-app).",
                 "also_available_at": PRICING_URL,
                 "note": (
-                    "Never state a price — none is defined here. Say prices are on the "
-                    f"pricing page and let the user open it themselves. {NEVER_BROWSE_NOTE}"
+                    "Never state a price or a billing model — neither is defined here. "
+                    "Say plans are on the pricing page and let the user open it "
+                    f"themselves. {NEVER_BROWSE_NOTE}"
                 ),
             }
 
@@ -864,7 +867,6 @@ def register_status(mcp: FastMCP):
                     {"feature": "🗑️ Find Duplicates", "try": "\"Find duplicates in [folder]\""},
                     {"feature": "🗑️ Delete Duplicates", "try": "\"Delete those duplicates\""},
                     {"feature": "📊 Export Reports", "try": "\"Export a report\""},
-                    {"feature": "🎨 Smart Albums", "try": "\"Suggest albums\""},
                     {"feature": "⏰ Scheduled Sweeps", "try": "\"Auto sort every 6 hours\""},
                     {"feature": "⚡ Active Folders", "try": "\"Watch my AirDrop folder\""},
                     {"feature": "📊 Dashboard", "try": "\"Open scheduler dashboard\""},
@@ -901,16 +903,11 @@ def register_status(mcp: FastMCP):
                         "problem": "Photos pile up. You forget to sort. Chaos returns.",
                         "solution": "Set once → photos organize THE INSTANT they arrive. Forever.",
                     },
-                    {
-                        "feature": "🎨 Smart Albums",
-                        "problem": "You don't even know what albums to create.",
-                        "solution": "AI suggests: 'Trip to Goa', 'Family 2023', 'Sunsets'.",
-                    },
                 ]
                 result["cta"] = (
-                    "One-time purchase, no subscription. Upgrade from the LocalLens tray "
-                    "menu → Plan, or say 'activate my pro license' if you already have a key. "
-                    f"Prices are listed at {PRICING_URL}."
+                    "Upgrade from the LocalLens tray menu → Plan, or say 'activate my pro "
+                    "license' if you already have a key. Current plans and pricing are "
+                    f"listed at {PRICING_URL}."
                 )
                 result["guidance"] = (
                     "Show Free tier as solid and valuable — don't make it feel limited. "

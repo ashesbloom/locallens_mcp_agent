@@ -1,7 +1,7 @@
 # Business Source License 1.1
 
 Licensor:             LocalLens AI Inc.
-Licensed Work:        LocalLens MCP Agent v1.0
+Licensed Work:        LocalLens MCP Agent v1.0.33 and later
                       The Licensed Work is (c) 2026 LocalLens AI Inc.
 
 Additional Use Grant: You may use the Licensed Work for non-production purposes,
@@ -9,9 +9,9 @@ Additional Use Grant: You may use the Licensed Work for non-production purposes,
                       without a commercial license.
 
                       Production use of Pro-tier features requires a valid license key
-                      obtained from "Lemon Squeezy URL here "
+                      obtained from https://locallensmcp.vercel.app/#pricing
 
-Change Date:          2026-07-18
+Change Date:          2030-08-08
 
 Change License:       Apache License, Version 2.0
 

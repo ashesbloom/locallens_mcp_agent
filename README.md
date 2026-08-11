@@ -20,7 +20,6 @@ LocalLens MCP is the AI bridge for [LocalLens](https://locallensmcp.vercel.app) 
 | *"Find all photos of Mom from last Christmas"* | Face recognition + date filtering, no upload needed |
 | *"Find duplicate photos in my Downloads"* | Reclaims gigabytes, with a safe dry-run preview |
 | *"Watch my camera roll and auto-sort new photos"* | Real-time folder monitoring, organizes on arrival |
-| *"Suggest albums for me"* | AI-powered smart album recommendations from your library |
 | *"What can LocalLens do?"* | Interactive feature guide, right in the chat |
 
 ---
@@ -208,7 +207,6 @@ Require an active Pro license (`activate_pro_license`):
 | Export reports | — | ✅ |
 | Scheduled auto-organize (every N hours) | — | ✅ |
 | Real-time folder watching | — | ✅ |
-| Smart album suggestions | — | ✅ |
 
 ### Activating Pro
 
@@ -231,7 +229,9 @@ LocalLens MCP is a strictly local server. It:
 - Discovers the LocalLens backend automatically via `~/.config/LocalLens/port.txt`
 - Stores the Pro license cache at `~/.config/LocalLens/mcp_license.json` (local only)
 
-The **only** network request is license activation — a one-time call to verify your key.
+A lifetime license makes **exactly one** network request, ever: activation. Nothing after it.
+A subscription re-checks periodically to confirm it is still active — no photos, paths or
+metadata are sent either way, only the license key.
 
 ---
 

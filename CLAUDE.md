@@ -47,7 +47,9 @@ Ollama (local LLM)                 ← Process 4, only needed for Chat UI
 ```
 
 - MCP Server and Chat UI are **completely independent** paths to the same backend.
-- The MCP server NEVER makes outbound internet calls except one-time license activation.
+- The MCP server makes no outbound calls except license activation, plus a periodic
+  re-validation for subscriptions only. Lifetime keys (`expires_at` is None) never re-check —
+  keep that fast path intact, it is what makes the privacy claim literally true for them.
 - **stdout is sacred** — it carries the MCP JSON-RPC channel. ALL logging MUST go to stderr.
 
 ## Structure
@@ -140,7 +142,8 @@ revert those surgically. Never `rm` an untracked file; git cannot restore it.
 |----------|---------|
 | `LOCALLENS_MCP_DEBUG=1` | Enables dev license bypass (with `LOCALLENS_DEV_KEY`) |
 | `LOCALLENS_DEV_KEY` | Test license key for dev bypass |
-| `LOCALLENS_STORE_URL` | Store URL shown in Pro upgrade prompts (default: `https://locallens.app`) |
+| `LOCALLENS_STORE_URL` | Store URL shown in Pro upgrade prompts (default: `https://locallensmcp.vercel.app`) |
+| `LOCALLENS_PRICING_URL` | Pricing page linked from upgrade prompts (default: `https://locallensmcp.vercel.app/#pricing`) |
 | `LOCALLENS_LICENSE_URL` | Lemon Squeezy license API base URL |
 | `LOCALLENS_VERSION_URL` | Version manifest URL for update checker |
 | `LOCALLENS_BACKEND_DIR` | Path to LocalLens backend dir (for scheduler daemon launch) |

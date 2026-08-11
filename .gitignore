@@ -50,3 +50,10 @@ test_env*.py
 .-.-/
 for dev/
 for LLM's/
+
+# Web development 
+locallensmcp/
+
+# Vite cache (generated at repo root during dev)
+.vite/
+package-lock.json
