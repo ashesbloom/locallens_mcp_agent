@@ -15,6 +15,15 @@
     },
     "changelog": [
       {
+        "version": "1.0.33",
+        "date": "August 2026",
+        "highlights": [
+          "Pro licenses can now be subscriptions as well as one-time purchases — they renew automatically, and a 14-day offline grace period means a failed renewal check never locks you out mid-trip.",
+          "License terms and default config no longer point at the dead locallens.app domain.",
+          "Upgrade prompts in the tray, README and in-chat help updated for the new pricing model — no longer claim \"no subscription\" and no longer list Smart Album Suggestions."
+        ]
+      },
+      {
         "version": "1.0.32",
         "date": "August 2026",
         "highlights": [
