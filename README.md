@@ -2,6 +2,13 @@
   <img src="icons/LLAgent_logo_red_readme.png" width="350" alt="LocalLens Agent Logo">
 </p>
 
+<p align="center">
+  <a href="https://github.com/ashesbloom/locallens_mcp_agent/releases/latest"><img src="https://img.shields.io/github/v/release/ashesbloom/locallens_mcp_agent?label=release" alt="Latest release"></a>
+  <a href="https://github.com/ashesbloom/locallens_mcp_agent/releases"><img src="https://img.shields.io/github/downloads/ashesbloom/locallens_mcp_agent/total?label=downloads" alt="Downloads"></a>
+  <a href="https://github.com/ashesbloom/locallens_mcp_agent/stargazers"><img src="https://img.shields.io/github/stars/ashesbloom/locallens_mcp_agent?label=stars" alt="Stars"></a>
+  <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-BSL--1.1-blue" alt="License"></a>
+</p>
+
 # LocalLens MCP Server
 
 > **Your Photos. Your Machine. Your Rules.**
@@ -9,6 +16,11 @@
 LocalLens MCP is the AI bridge for [LocalLens](https://locallensmcp.vercel.app) — a privacy-first photo organizer that runs 100% on your computer. Connect it to Claude Desktop (or any MCP-compatible AI) and organize, search, and manage your entire photo library using plain English.
 
 **Zero data leaves your machine. Not even metadata.**
+
+> 🎉 **Free preview:** every Pro feature below is unlocked for everyone right now — no
+> license, no signup. If you're using LocalLens during the preview, you keep all of it
+> free, permanently, once paid plans launch. Not a trial ending — a thank-you for being
+> here early. Details: [locallensmcp.vercel.app/#pricing](https://locallensmcp.vercel.app/#pricing).
 
 ---
 
@@ -135,10 +147,7 @@ Add the following to your Claude Desktop config file:
 {
   "mcpServers": {
     "locallens": {
-      "command": "locallens-mcp",
-      "env": {
-        "LOCALLENS_STORE_URL": "https://locallens.lemonsqueezy.com"
-      }
+      "command": "locallens-mcp"
     }
   }
 }
@@ -151,6 +160,9 @@ Restart Claude Desktop. LocalLens tools will appear in Claude's tool panel.
 ---
 
 ## Free vs Pro
+
+The tiers below are how tools are grouped long-term. **During the free preview, that
+grouping doesn't gate anything** — every tool on both lists runs for everyone right now.
 
 ### Free Tools
 
@@ -177,7 +189,8 @@ Available to everyone, no license required:
 
 ### Pro Tools
 
-Require an active Pro license (`activate_pro_license`):
+Normally require an active Pro license (`activate_pro_license`) — free for everyone
+during the preview, no license needed:
 
 | Tool | What it does |
 |---|---|
@@ -210,13 +223,18 @@ Require an active Pro license (`activate_pro_license`):
 
 ### Activating Pro
 
-Purchase a license at [locallensmcp.vercel.app](https://locallensmcp.vercel.app), then activate it in Claude:
+Nothing to do right now — Pro tools already run with no key while the free preview is
+on. Just ask Claude to use them.
+
+Once paid plans launch, activation will look like this:
 
 ```
 activate_pro_license(license_key="YOUR-LICENSE-KEY")
 ```
 
 Activation requires internet **once**. After that, all Pro features work fully offline.
+And if you're already using LocalLens today, that step won't be required of you anyway —
+see the free preview note above.
 
 ---
 

@@ -90,6 +90,10 @@ brew upgrade --cask locallens-agent
 
 ---
 
+<!--
+Paid-mode version of this section — restore verbatim once FREE_PREVIEW flips back to
+false (see docs/RESTORING_PAID_MODE.md):
+
 ## 🔑 Free vs Pro
 
 Free is a complete photo organizer, not a trial.
@@ -110,6 +114,27 @@ Free is a complete photo organizer, not a trial.
 Upgrade from the **tray menu → Plan**, or see current plans and pricing at [locallensmcp.vercel.app](https://locallensmcp.vercel.app/#pricing).
 
 Already have a key? Ask Claude: *"activate my pro license"*.
+-->
+
+## 🎉 Free preview — everything is unlocked
+
+There is no store yet, so there is nothing to buy. Every tool below runs for
+everyone, with no license key:
+
+| | Available now |
+|---|:---:|
+| Sort by Date, Location, or People | ✅ |
+| Find & Group — including by person | ✅ |
+| Folder analysis, saved path presets, stats | ✅ |
+| Batch face enrollment | ✅ |
+| Duplicate detection & cleanup | ✅ |
+| Export reports | ✅ |
+| Scheduled auto-organize & active folders | ✅ |
+
+**If you're using LocalLens now, you keep all of this for free, permanently** —
+even after paid plans launch. That's not a trial period ending; it's a thank-you
+for being here early. See [locallensmcp.vercel.app/#pricing](https://locallensmcp.vercel.app/#pricing)
+for how it works.
 
 ---
 
