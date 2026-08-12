@@ -114,9 +114,65 @@ The **count** is the one thing that does not sync — Lemon Squeezy stops the co
 cannot tell the website, so it keeps advertising. When it sells out, set `FOUNDING_ENDS_AT`
 to a past date and redeploy.
 
+**Status as of 2026-08-12: not armed.** Lemon Squeezy rejected the store application (no
+live public site/social/customer base yet — see `LAUNCH_CHECKLIST.md` Phase 2). The
+`2026-10-07T00:00:00Z` currently in `FOUNDING_ENDS_AT` is a leftover placeholder, not a
+real deadline — there is no store for it to correspond to. Don't set the real date until
+Lemon Squeezy approves; that's the first step of `LAUNCH_CHECKLIST.md` Phase 3.
+
 **Rejected alternatives:** manually unpublishing the variant at 100 (races past the cap);
 a webhook + API integration to disable variants (needs a server and an API key to solve
 what a coupon field already solves).
+
+---
+
+## Free preview — grandfathering
+
+**The promise: nobody who used LocalLens during the free preview ever pays.** They keep
+every Pro feature, permanently, at no cost. This is a commitment made publicly on the
+site, not a marketing hedge — it must be honored even where honoring it costs a sale.
+
+It also supersedes Founding-100 for anyone who arrived during the preview: they are not
+one of the hundred, they are simply free. Founding-100 begins at paid launch, for people
+arriving after it.
+
+The reasoning is not only ethical. The preview exists because Lemon Squeezy asked to see a
+real user base before approving the store — so these are the exact people whose adoption
+unblocks the business. Charging them for having shown up early would be both a bad trade
+and the kind of thing that gets written up.
+
+### How eligibility is established
+
+There is **no user registry, by design.** LocalLens makes no network calls, so there is no
+list of who joined and no way to build one without breaking the product's central promise.
+Eligibility is therefore established locally, two ways, and generously:
+
+**1. Automatic — local install date.** Every install carries
+`~/.config/LocalLens/mcp_onboarded.json` with an `onboarded_at` timestamp. If it predates
+`_PREVIEW_CUTOFF` (`src/mcp_server/license.py`, the paid-launch date), Pro stays unlocked
+forever. No key, no activation, no network call — the privacy claim stays literally true
+for these users, as it does for lifetime buyers.
+
+Absent or unparseable markers resolve to **eligible**. That is deliberate and matches
+`_parse_expiry()`'s permissive reading of a bad `expires_at`: erring the other way locks
+out someone we promised not to charge, which is a far worse failure than granting Pro to
+someone who reinstalled. Note the marker is written by the desktop app's setup page
+(`"source": "setup_page"`), which lives in the backend repo — so an install path that
+skips that page leaves no marker at all. The MCP stamps one itself when it finds none.
+
+**2. Manual claim.** Anyone who reinstalled, switched machines, or lost the marker can
+say so through the contact form and be issued a free key. No proof required; the honest
+majority costs less than the alternative.
+
+**Forgeability is not a new problem.** A local date check is exactly as editable as the
+license cache sitting next to it — see *Licensing code* below and the note that there is
+no location in a 100%-local product the user cannot edit. It costs nothing new, and the
+realistic mitigations (low price, current BSL, frozen binaries) are unchanged.
+
+**Rejected:** requiring an email signup to qualify (a registry, which is the thing the
+product exists to not have); telemetry to count installs (same problem, worse); and
+silently letting the promise lapse for users who never wrote in (the failure mode that
+makes the promise worthless).
 
 ---
 
@@ -196,6 +252,12 @@ grep -raF -- '₹249' .output/public/    # must be empty — client bundle
 grep -raF -- '₹249' .output/server/    # must NOT be empty — server bundle
 ```
 
+  **While `FREE_PREVIEW` is on, the second line is empty too, and that is correct.**
+  `resolveOffer()` returns the free offer before it reads `country`, and because the
+  flag is a `const true` the bundler proves the band map unreachable and drops it from
+  the server bundle as well. Nothing about regional pricing exists in the deployed
+  artifact at all right now. Re-apply the check as written once the preview ends.
+
   Use `grep -F`. Without it, `$49` is read as a regex meaning "end of line, then 49" and
   silently matches nothing, which looks like a passing test.
 
@@ -208,28 +270,22 @@ carries the billing country — observe, don't block.
 
 ---
 
-## Licensing code: what still needs building
+## Licensing code — shipped
 
-**Today the MCP server can only enforce lifetime licenses.** `is_pro_active()`
-(`src/mcp_server/license.py`) checks `tier` and `machine_id` and nothing else; the cache
-stores no expiry, and no network call is ever made after activation. Once a key activates,
-Pro is unlocked permanently and offline.
+**The MCP server enforces both lifetime and subscription licenses.**
+`is_pro_active()` (`src/mcp_server/license.py`) returns true when `expires_at is None`
+(lifetime — unlocked permanently and offline, exactly one network call ever) or when
+`now` is still inside `expires_at` plus a 14-day offline grace. Within 7 days of expiry,
+`refresh_license_if_stale()` attempts one re-validation and rewrites the cache; on
+network failure the grace window covers it. `README.md`'s privacy claim is worded to
+match: one request ever for lifetime, periodic re-checks (key only, no photos/paths) for
+subscriptions. 9 tests in `tests/test_license_expiry.py` cover all four behaviours,
+mutation-tested against the old always-true `is_pro_active()`.
 
-That is exactly correct for the Founding-100 launch — lifetime keys return
-`expires_at: null` — so **the founding launch needs no licensing changes at all.**
-
-**Before the first subscription is sold**, `src/mcp_server/license.py` needs:
-
-1. `activate_license()` to read `license_key.expires_at` from the validate response (it
-   currently receives the whole body in `body` and discards everything but `valid`).
-2. `_write_cache()` to persist `expires_at`, nullable — `None` means lifetime.
-3. `is_pro_active()` to return true if `expires_at is None` **or** `now < expires_at`.
-4. An auto-refresh: within 7 days of expiry or past it, attempt one `/validate` and rewrite
-   the cache; on network failure allow a **14-day offline grace** before locking.
-5. **The privacy claim to be corrected.** `README.md` promises *"the only network request is
-   license activation."* Periodic revalidation makes that false for subscribers. Keep the
-   `expires_at is None` fast path explicit so it stays literally true for lifetime buyers,
-   and reword for everyone else.
+This was necessary groundwork, not launch-blocking scope creep: without it, a monthly
+subscriber could pay once, cancel immediately, and keep Pro forever. It shipped in
+`7900d04`/`a903c01` (`v1.0.33`) ahead of `MONTHLY_ENABLED` being flipped on, so the gate
+already exists by the time it's needed.
 
 ---
 

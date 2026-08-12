@@ -214,6 +214,126 @@ def is_pro_active() -> bool:
     return datetime.now(timezone.utc) < expiry + _OFFLINE_GRACE
 
 
+# No store exists yet: Lemon Squeezy declined the merchant application pending a
+# live site and a real user base (docs/LAUNCH_CHECKLIST.md Phase 2). Nothing can be
+# bought, so nothing is gated. Flip to False in the same change that wires the
+# Lemon Squeezy variant IDs, and in lockstep with FREE_PREVIEW in the website's
+# src/content/pricing.ts — the site offering the product free while the MCP still
+# refuses a tool is the one combination that makes a liar of both.
+FREE_PREVIEW = True
+
+# The paid-launch date, as an ISO-8601 string. Anyone whose install predates it was
+# a free-preview user and keeps Pro permanently — that is a public promise, not a
+# courtesy (docs/PRICING.md, "Free preview — grandfathering").
+#
+# SET THIS BEFORE FLIPPING FREE_PREVIEW OFF. Order matters: with FREE_PREVIEW False
+# and no cutoff, `installed_before_cutoff()` returns False for everyone and every
+# existing user silently loses access they were told they would keep.
+_PREVIEW_CUTOFF: Optional[str] = None
+
+
+def _onboarding_marker() -> Path:
+    """Where the first-run timestamp lives. Read by grandfathering and is_new_user."""
+    return _get_license_dir() / "mcp_onboarded.json"
+
+
+def _stamp_onboarding_if_absent() -> None:
+    """
+    Write the first-run marker if nothing has yet.
+
+    Normally the desktop app's setup page writes it (`"source": "setup_page"`), but
+    that code lives in the backend repo and an install path that skips the setup
+    page leaves no marker at all. Since the marker is now what proves free-preview
+    eligibility, the MCP stamps its own rather than depending on another repo
+    having run. Best-effort: a read-only home directory must not break a tool call.
+    """
+    try:
+        # _get_license_dir() (inside _onboarding_marker()) raises RuntimeError if
+        # APPDATA is unset on Windows, and path.exists() can raise PermissionError
+        # on an unreadable parent — both must stay inside this try. This is called
+        # unconditionally at server startup (main.py); letting either escape would
+        # kill the whole server for that user, which is a worse failure than never
+        # stamping the marker at all.
+        path = _onboarding_marker()
+        if path.exists():
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "onboarded": True,
+                    # Timezone-aware, matching _parse_expiry()'s "naive == UTC by
+                    # convention" rule explicitly rather than by accident — a naive
+                    # local timestamp from a positive-UTC-offset install could
+                    # otherwise read as later than the true instant and wrongly
+                    # push a legitimate pre-cutoff install past _PREVIEW_CUTOFF.
+                    "onboarded_at": datetime.now(timezone.utc).isoformat(),
+                    "version": "1.0",
+                    "source": "mcp_server",
+                }
+            ),
+            encoding="utf-8",
+        )
+    except Exception as e:
+        _log.debug("Could not stamp onboarding marker: %s", e)
+
+
+def installed_before_cutoff() -> bool:
+    """
+    True when this install dates from the free preview, which grants Pro forever.
+
+    Every ambiguous case resolves to True, deliberately. A missing marker, an
+    unreadable one, a garbage timestamp — all mean "we cannot prove you arrived
+    late", and the promise was that preview users keep Pro. This mirrors
+    `_parse_expiry()` treating an unparseable expiry as lifetime, for the same
+    reason: locking out someone we promised not to charge is a far worse failure
+    than granting Pro to someone who reinstalled.
+
+    Returns False only when there is a cutoff AND a readable timestamp at or after
+    it — i.e. only when we positively know the user arrived post-launch.
+    """
+    if _PREVIEW_CUTOFF is None:
+        # No paid launch has happened, so nobody can be "after" it.
+        return True
+
+    cutoff = _parse_expiry(_PREVIEW_CUTOFF)
+    if cutoff is None:
+        _log.warning("_PREVIEW_CUTOFF %r is unparseable — treating all installs as "
+                     "preview users.", _PREVIEW_CUTOFF)
+        return True
+
+    try:
+        stamp = json.loads(_onboarding_marker().read_text(encoding="utf-8")).get("onboarded_at")
+    except Exception:
+        return True  # no marker, or unreadable — benefit of the doubt
+
+    installed = _parse_expiry(stamp)
+    if installed is None:
+        return True
+
+    return installed < cutoff
+
+
+def pro_features_unlocked() -> bool:
+    """
+    Whether Pro tools may run.
+
+    Three independent grants, any one of which is enough:
+      1. `FREE_PREVIEW` — no store exists, so nothing is gated.
+      2. `installed_before_cutoff()` — a free-preview user, who keeps Pro forever.
+         This clause outlives the preview; it is the grandfathering promise, and
+         removing it when FREE_PREVIEW flips off would break it.
+      3. `is_pro_active()` — an actual paid license.
+
+    Deliberately separate from `is_pro_active()`, which answers the narrower
+    question "does this machine hold a valid paid license". Keeping them apart is
+    what lets `get_license_status` keep telling the truth about the user's actual
+    license while the gate is open, and keeps the expiry enforcement in
+    `is_pro_active()` exercised by its own tests instead of short-circuited.
+    """
+    return FREE_PREVIEW or installed_before_cutoff() or is_pro_active()
+
+
 def _needs_refresh(cache: Dict[str, Any]) -> bool:
     """True when a subscription is inside the renewal window or already past it."""
     expiry = _parse_expiry(cache.get("expires_at"))
@@ -283,6 +403,15 @@ def get_license_info() -> Dict[str, Any]:
             "expires_at": cache.get("expires_at"),
             "machine_id": cache.get("machine_id"),
             "instance_id": cache.get("instance_id"),
+        }
+    if FREE_PREVIEW:
+        return {
+            "activated": False,
+            "tier": "free",
+            "message": (
+                "Nothing is locked right now — LocalLens is in free preview and every "
+                "Pro feature is unlocked for everyone. Paid plans arrive later."
+            ),
         }
     return {
         "activated": False,
@@ -457,10 +586,11 @@ def is_new_user() -> bool:
     about pricing still gets the link — that is answering the question, not touting.
     Repeating it at every turn for someone already using the app is the nag we avoid.
 
-    Reuses the existing mcp_onboarded.json marker; no new state is written.
+    Reuses the existing mcp_onboarded.json marker; no new state is written here.
+    (`_stamp_onboarding_if_absent()` may create it, but only at server start.)
     """
     try:
-        marker = _get_license_dir() / "mcp_onboarded.json"
+        marker = _onboarding_marker()
         if not marker.exists():
             return True  # never onboarded — definitely new
         stamp = json.loads(marker.read_text(encoding="utf-8")).get("onboarded_at")
@@ -504,7 +634,7 @@ def require_pro(func: Callable) -> Callable:
         # No-op for lifetime keys and for subscriptions with time left, so the
         # common case stays entirely offline.
         await refresh_license_if_stale()
-        if not is_pro_active():
+        if not pro_features_unlocked():
             return {
                 "error": "pro_required",
                 "tool": func.__name__,

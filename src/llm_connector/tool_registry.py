@@ -10,7 +10,7 @@ FastAPI backend directly via httpx.  This module mirrors every tool from
   - mcp_server/tools/actions.py
   - mcp_server/tools/pro_tools.py
 
-Pro tools are gated behind license.is_pro_active() and return the same
+Pro tools are gated behind license.pro_features_unlocked() and return the same
 upgrade prompt that the MCP @require_pro decorator returns.
 """
 
@@ -28,7 +28,7 @@ from mcp_server.license import (
     activate_license,
     deactivate_license,
     get_license_info,
-    is_pro_active,
+    pro_features_unlocked,
     PRO_UPGRADE_MESSAGE,
 )
 
@@ -143,7 +143,7 @@ def _resolve_path(path: str, preset_key: str) -> str:
 def _pro_gate(func: Callable) -> Callable:
     """Synchronous Pro-gating wrapper for chat-UI tools."""
     def wrapper(*args, **kwargs) -> Dict[str, Any]:
-        if not is_pro_active():
+        if not pro_features_unlocked():
             return {
                 "error": "pro_required",
                 "tool": func.__name__,

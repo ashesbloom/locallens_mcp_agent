@@ -28,7 +28,7 @@ from .actions import (
     get_claude_connection_state, maybe_show_welcome, show_help_tips,
     check_updates_now, open_url, copy_to_clipboard,
     get_current_app_info, install_mcp_update, format_download_progress,
-    get_pricing_url,
+    get_pricing_url, FREE_PREVIEW,
     CLAUDE_CUSTOM_INSTRUCTIONS, CLAUDE_INSTRUCTIONS_HOWTO,
     STATUS_OFF, STATUS_STARTING, STATUS_ON, STATUS_EXTERNAL, STATUS_ALERT,
 )
@@ -584,6 +584,24 @@ def on_plan(icon, item):
             "active folders.\n\n"
             "This licence is tied to this machine.",
         )
+        return
+
+    # Free preview: nothing is gated, so this must not read as an upsell. The
+    # grandfathering line is the point — it is a real commitment (docs/PRICING.md)
+    # and the tray is where an existing user looks for it. Mirrors tray_mac.py.
+    if FREE_PREVIEW:
+        if _confirm(
+            "License & Plans",
+            "Plan: Free preview\n\n"
+            "Everything is unlocked - sort by date, location and people, "
+            "find & group, batch face enrolment, duplicate detection and "
+            "cleanup, export reports, scheduled sweeps and active folders.\n\n"
+            "No licence needed, and nothing to buy yet.\n\n"
+            "You are an early user: when paid plans launch, you keep Pro free. "
+            "You will not be charged.\n\n"
+            "Open the website to learn more?",
+        ):
+            open_url(get_pricing_url())
         return
 
     if _confirm(

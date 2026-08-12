@@ -17,6 +17,7 @@ try:
 except ImportError:
     pass
 
+from .license import _stamp_onboarding_if_absent
 from .tools.status import register_status
 from .tools.queries import register_queries
 from .tools.actions import register_actions
@@ -79,6 +80,14 @@ Responses may include a "next_actions" array — present these as natural follow
 """
     )
 
+
+    # Establish free-preview eligibility before any tool can run. The desktop
+    # app's setup page normally writes this marker, but that lives in the backend
+    # repo and not every install path reaches it — and the marker is what proves a
+    # user arrived during the preview and therefore keeps Pro forever. Stamping it
+    # at start means eligibility never depends on another repo having run.
+    # See docs/PRICING.md, "Free preview — grandfathering".
+    _stamp_onboarding_if_absent()
 
     # Register all tools from various modules
     register_status(mcp)

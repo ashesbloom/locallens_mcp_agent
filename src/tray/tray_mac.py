@@ -9,7 +9,7 @@ from .actions import (
     get_claude_connection_state, maybe_show_welcome, show_help_tips,
     check_updates_now, open_url, copy_to_clipboard,
     get_current_app_info, install_mcp_update, format_download_progress,
-    get_pricing_url,
+    get_pricing_url, FREE_PREVIEW,
     CLAUDE_CUSTOM_INSTRUCTIONS, CLAUDE_INSTRUCTIONS_HOWTO,
     STATUS_OFF, STATUS_STARTING, STATUS_ON, STATUS_EXTERNAL, STATUS_ALERT,
 )
@@ -307,7 +307,13 @@ class LocalLensAgentApp(rumps.App):
         self.btn_info_mcp.title = f"  ℹ  MCP Agent v{mcp_ver}"
 
         tier = info.get("license_tier", "Free")
-        self.btn_info_plan.title = f"  ℹ  Plan: {tier}"
+        # A bare "Plan: Free" during the preview reads as the limited tier, which is
+        # the opposite of what is happening — everything is unlocked. This label is
+        # always on screen, so it is the cheapest place to say so.
+        if FREE_PREVIEW and not info.get("license_activated"):
+            self.btn_info_plan.title = "  ℹ  Plan: Free preview — all unlocked"
+        else:
+            self.btn_info_plan.title = f"  ℹ  Plan: {tier}"
 
         app_ver = info.get("app_version")
         if app_ver:
@@ -401,6 +407,26 @@ class LocalLensAgentApp(rumps.App):
                 "This licence is tied to this machine.",
                 ok="OK",
             )
+            return
+
+        # Free preview: nothing is gated, so this must not read as an upsell.
+        # The grandfathering line is the point — it is a real commitment
+        # (docs/PRICING.md) and the tray is where an existing user looks for it.
+        if FREE_PREVIEW:
+            res = rumps.alert(
+                "License & Plans",
+                "Plan: Free preview  🎉\n\n"
+                "Everything is unlocked — sort by date, location and people, "
+                "find & group, batch face enrolment, duplicate detection and "
+                "cleanup, export reports, scheduled sweeps and active folders.\n\n"
+                "No licence needed, and nothing to buy yet.\n\n"
+                "You are an early user: when paid plans launch, you keep Pro "
+                "free. You will not be charged.",
+                ok="Learn more",
+                cancel="Close",
+            )
+            if res == 1:
+                open_url(get_pricing_url())
             return
 
         res = rumps.alert(

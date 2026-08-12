@@ -31,6 +31,14 @@ except ImportError:
             p.suffix == ".app" for p in Path(sys.executable).parents
         )
 
+try:
+    from mcp_server.license import FREE_PREVIEW
+except ImportError:
+    # Falling back to False shows the paid Plan screen — wrong during the preview,
+    # but the honest direction to fail: it never promises free access the MCP would
+    # then refuse. Both tray files read this one name so they cannot disagree.
+    FREE_PREVIEW = False
+
 
 def get_claude_connection_state() -> dict:
     """

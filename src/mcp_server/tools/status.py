@@ -5,7 +5,13 @@ from mcp.server.fastmcp import FastMCP
 from typing import Dict, Any, Optional
 
 from ..config import get_locallens_url
-from ..license import get_license_info, PRICING_URL, NEVER_BROWSE_NOTE, is_new_user
+from ..license import (
+    get_license_info,
+    FREE_PREVIEW,
+    PRICING_URL,
+    NEVER_BROWSE_NOTE,
+    is_new_user,
+)
 from ..updater import check_for_updates, _is_bundled
 from .queries import SUPPORTED_EXTENSIONS
 
@@ -437,6 +443,18 @@ def register_status(mcp: FastMCP):
         license_info = get_license_info()
         is_pro = license_info.get("activated", False)
 
+        # `is_pro` answers "does this user hold a paid license" and drives what we
+        # SAY about their license. `unlocked` answers "can they actually run Pro
+        # tools right now" and drives which branch we take. During the free preview
+        # those diverge: without this, every topic below took the Free branch and
+        # pitched (`pro_pitch`, `pro_showcase`) features the user can already run —
+        # the assistant selling something it is simultaneously giving away.
+        unlocked = is_pro or FREE_PREVIEW
+        tier_label = (
+            "pro ✅ (unlocked)" if is_pro
+            else "free preview — every Pro feature unlocked, no license needed"
+        )
+
         # ══════════════════════════════════════════════
         # WELCOME — The landing page
         # ══════════════════════════════════════════════
@@ -456,7 +474,12 @@ def register_status(mcp: FastMCP):
                     "🗑️ \"Find duplicate photos\" → Reclaim gigabytes of storage",
                     "⚡ \"Watch this folder\" → New photos auto-organized instantly",
                 ],
-                "license_status": "Pro ✅" if is_pro else "Free tier — Pro features available",
+                "license_status": (
+                    "Pro ✅" if is_pro
+                    else "Free preview — every Pro feature unlocked, no license needed"
+                    if FREE_PREVIEW
+                    else "Free tier — Pro features available"
+                ),
                 "explore_topics": [
                     {"topic": "quickstart", "label": "🚀 Quick Start — 3 things to try right now"},
                     {"topic": "organize", "label": "📂 Organizing — Sort photos by date, location, people"},
@@ -661,7 +684,7 @@ def register_status(mcp: FastMCP):
                     "hook": "The sorting is free; Pro speeds up getting faces enrolled.",
                 }
             else:
-                result["tier"] = "pro ✅ (unlocked)"
+                result["tier"] = tier_label
                 result["quick_action"] = "Say 'who do you recognize?' or 'add [name] to face recognition'."
             result["guidance"] = (
                 "Show the 3-step flow and the birthday scenario. "
@@ -712,7 +735,7 @@ def register_status(mcp: FastMCP):
                     "hook": "Most users recover 5-15 GB on their first scan.",
                 }
             else:
-                result["tier"] = "pro ✅ (unlocked)"
+                result["tier"] = tier_label
                 result["quick_action"] = "Say 'find duplicates in [folder]' to start now."
             result["guidance"] = (
                 "Lead with the phone sync scenario — everyone relates. "
@@ -775,7 +798,7 @@ def register_status(mcp: FastMCP):
                     "hook": "Like a personal photo librarian that never sleeps.",
                 }
             else:
-                result["tier"] = "pro ✅ (unlocked)"
+                result["tier"] = tier_label
                 result["quick_action"] = "Try: 'Watch my [folder] and organize by location' or 'Auto sort every 2 hours'."
             result["guidance"] = (
                 "Present the two modes as a clear comparison. Walk through the AirDrop scenario. "
@@ -849,18 +872,84 @@ def register_status(mcp: FastMCP):
             # now — regional bands, and a founding lifetime offer that closes — so
             # asserting either is the same failure as asserting a price. See
             # docs/PRICING.md; the pricing page is the only source of truth.
-            result["pricing"] = {
-                "model": "Plans and current offers are listed on the pricing page.",
-                "primary": "Tray menu → Plan (shows your tier and upgrade options in-app).",
-                "also_available_at": PRICING_URL,
-                "note": (
-                    "Never state a price or a billing model — neither is defined here. "
-                    "Say plans are on the pricing page and let the user open it "
-                    f"themselves. {NEVER_BROWSE_NOTE}"
-                ),
-            }
+            if FREE_PREVIEW:
+                # There is nothing to buy, so this must not read as an upsell. The
+                # grandfathering line is the point: it is a real commitment recorded
+                # in docs/PRICING.md, and this is the main place a user hears it.
+                result["pricing"] = {
+                    "model": (
+                        "LocalLens is in free preview. Every Pro feature is unlocked "
+                        "for everyone and nothing is for sale yet."
+                    ),
+                    "grandfathering": (
+                        "Anyone using LocalLens during the preview keeps Pro free "
+                        "permanently — when paid plans launch, existing users are not "
+                        "charged."
+                    ),
+                    "also_available_at": PRICING_URL,
+                    "note": (
+                        "Say the preview is free and that existing users keep Pro for "
+                        "good. Do NOT pitch an upgrade, quote a price, or suggest "
+                        "activating a license — there is no store and no key to buy. "
+                        f"{NEVER_BROWSE_NOTE}"
+                    ),
+                }
+            else:
+                result["pricing"] = {
+                    "model": "Plans and current offers are listed on the pricing page.",
+                    "primary": "Tray menu → Plan (shows your tier and upgrade options in-app).",
+                    "also_available_at": PRICING_URL,
+                    "note": (
+                        "Never state a price or a billing model — neither is defined here. "
+                        "Say plans are on the pricing page and let the user open it "
+                        f"themselves. {NEVER_BROWSE_NOTE}"
+                    ),
+                }
 
-            if is_pro:
+            # Three states, not two. The preview is genuinely a third: everything
+            # runs, but the user holds no license and the free/Pro split still
+            # matters to them — "what will I have to pay for later?" is a fair
+            # question and the answer is "nothing, if you are here now".
+            #
+            # Taking the plain `unlocked` branch here was a real regression caught
+            # by tests/test_bundle_and_pricing.py::test_free_tier_lists_people_sort:
+            # it dropped the free_tier list, which is the only place that states
+            # People sort is free. That list exists because the assistant once told
+            # a user People sort was locked. It must survive every branch.
+            if FREE_PREVIEW and not is_pro:
+                result["status"] = (
+                    "🎉 Free preview — every Pro feature is unlocked, no license needed."
+                )
+                result["free_tier"] = [
+                    "✅ Sort by Date — Chronological folders",
+                    "✅ Sort by Location — GPS-based sorting",
+                    "✅ Sort by People — Everyone gets their own folder (face recognition)",
+                    "✅ Find & Group — Pull out specific photos, including by person",
+                    "✅ See Enrolled People — Who face recognition already knows",
+                    "✅ Analyze Folders — See what's inside",
+                    "✅ Path Presets — Save favorites",
+                    "✅ Open Folder — Quick access",
+                    "✅ Stats & Status — Full overview",
+                ]
+                result["free_during_preview"] = [
+                    {"feature": "👤 Batch Enroll Faces", "try": "\"Add [name] to face recognition\""},
+                    {"feature": "🗑️ Find Duplicates", "try": "\"Find duplicates in [folder]\""},
+                    {"feature": "🗑️ Delete Duplicates", "try": "\"Delete those duplicates\""},
+                    {"feature": "📊 Export Reports", "try": "\"Export a report\""},
+                    {"feature": "⏰ Scheduled Sweeps", "try": "\"Auto sort every 6 hours\""},
+                    {"feature": "⚡ Active Folders", "try": "\"Watch my AirDrop folder\""},
+                    {"feature": "📊 Dashboard", "try": "\"Open scheduler dashboard\""},
+                ]
+                result["guidance"] = (
+                    "Two lists: free_tier is free forever; free_during_preview is "
+                    "normally Pro and is unlocked right now at no cost. Say clearly "
+                    "that anyone using LocalLens during the preview keeps Pro free "
+                    "permanently — they will not be charged when paid plans launch. "
+                    "Do NOT pitch an upgrade, quote a price, or suggest activating a "
+                    "license; there is nothing to buy. Invite them to try something "
+                    "from free_during_preview. End with explore_next."
+                )
+            elif unlocked:
                 result["status"] = "🎉 You have Pro — everything is unlocked!"
                 result["your_features"] = [
                     {"feature": "👤 Batch Enroll Faces", "try": "\"Add [name] to face recognition\""},
@@ -1007,7 +1096,7 @@ def register_status(mcp: FastMCP):
                     result["coming_soon"].append(item)
 
             # ── Pro perks ──────────────────────────────────────────────
-            if is_pro:
+            if unlocked:
                 result["pro_insider"] = {
                     "badge": "⭐ Pro Member",
                     "message": "You'll get early access to new features as soon as they're ready.",
