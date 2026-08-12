@@ -1,7 +1,7 @@
 # Business Source License 1.1
 
 Licensor:             LocalLens AI Inc.
-Licensed Work:        LocalLens MCP Agent v1.0.33 and later
+Licensed Work:        LocalLens MCP Agent v1.0.34 and later
                       The Licensed Work is (c) 2026 LocalLens AI Inc.
 
 Additional Use Grant: You may use the Licensed Work for non-production purposes,
