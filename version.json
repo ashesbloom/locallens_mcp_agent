@@ -15,6 +15,15 @@
     },
     "changelog": [
       {
+        "version": "1.0.34",
+        "date": "August 2026",
+        "highlights": [
+          "LocalLens is in a free preview — every Pro feature is unlocked for everyone right now, no license required.",
+          "Anyone using LocalLens during the free preview keeps Pro permanently once paid plans launch. You will not be charged.",
+          "The assistant and tray no longer suggest upgrading to Pro for features that are already unlocked during the preview."
+        ]
+      },
+      {
         "version": "1.0.33",
         "date": "August 2026",
         "highlights": [
