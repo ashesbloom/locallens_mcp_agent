@@ -15,6 +15,14 @@
     },
     "changelog": [
       {
+        "version": "1.1.0",
+        "date": "August 2026",
+        "highlights": [
+          "Nothing about how LocalLens works changed in this release — v1.0.34 already unlocked everything. This one is the README, release notes and download page catching up to say so consistently.",
+          "The website now has cookieless visit analytics and the README shows live download and star counts. Both are public numbers only; nothing was added to what the MCP agent itself sends over the network."
+        ]
+      },
+      {
         "version": "1.0.34",
         "date": "August 2026",
         "highlights": [
