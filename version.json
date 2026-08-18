@@ -15,6 +15,14 @@
     },
     "changelog": [
       {
+        "version": "1.1.1",
+        "date": "August 2026",
+        "highlights": [
+          "Finding duplicate photos or exporting a report could fail with a missing-library error, and the assistant would then suggest installing that library by hand — which could never work. It now points you at the LocalLens app update that actually fixes it.",
+          "On LocalLens 3.0.1 and newer, duplicate scans of large photo libraries run in the background and report progress instead of giving up partway through."
+        ]
+      },
+      {
         "version": "1.1.0",
         "date": "August 2026",
         "highlights": [
