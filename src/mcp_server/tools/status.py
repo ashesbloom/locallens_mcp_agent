@@ -355,7 +355,7 @@ def register_status(mcp: FastMCP):
         - message (str): Latest human-readable status message from the backend
 
         Job identity:
-        - job_type (str|null): "sorting" | "find_group" | "enrollment" | null (no job yet)
+        - job_type (str|null): "sorting" | "find_group" | "enrollment" | "duplicates" | null (no job yet)
         - operation_mode (str|null): "copy" or "move" — find_group is always "copy"
 
         Location context:

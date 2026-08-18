@@ -154,7 +154,8 @@ def _resolve_destination(
 async def _wait_for_completion(
     client: httpx.AsyncClient,
     timeout_s: int,
-    poll_interval_s: float
+    poll_interval_s: float,
+    assume_started: bool = False
 ) -> Dict[str, Any]:
     """
     Polls /api/job-status until the backend job reaches a terminal state.
@@ -170,6 +171,17 @@ async def _wait_for_completion(
       this is state from a *previous* job. We require the backend to transition
       through `is_active=True` (i.e., the new job must actually start) before
       we consider the terminal status as belonging to the current job.
+
+    assume_started:
+      Set this only when the caller has already been told by the backend that THIS
+      job started (e.g. the POST returned status="started"). That is the one piece of
+      knowledge the stale-state guard lacks, and without it a job that finishes inside
+      the first poll interval is unobservable: `is_active=True` never gets sampled, so
+      every exit condition above stays gated and the caller spins until timeout_s,
+      reporting "still_running" for a job that is already done. Short scans hit this
+      routinely — a few dozen photos hash in well under one poll.
+      Leave it False when the POST does not confirm a start, or the guard is defeated
+      and a previous job's terminal state can be misread as this one's result.
     """
     # Clamp poll_interval_s: asyncio.sleep() with 0 or negative values returns
     # instantly, creating a tight loop that hammers the backend indefinitely.
@@ -182,7 +194,7 @@ async def _wait_for_completion(
 
     start = time.monotonic()
     last_status: Dict[str, Any] = {}
-    has_started = False           # True once the job has been seen as active
+    has_started = assume_started  # True once the job has been seen as active
     last_backend_message: Optional[str] = None
 
     while True:

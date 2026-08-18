@@ -24,6 +24,7 @@ Current Pro Tools:
 
 import os
 import asyncio
+import re
 import time
 import logging
 import signal
@@ -56,12 +57,55 @@ if not _log.handlers:
     _log.propagate = False
 
 
+# The backend answers 501 when an optional dependency is absent from the build
+# (imagehash for find-duplicates, reportlab for PDF export). Its detail string has
+# historically ended in "Run: pip install <lib>" — an imperative that an LLM client
+# reads as an instruction and executes, in its own shell, against an interpreter that
+# is not the backend's. The shipped backend is a self-contained PyInstaller bundle:
+# no pip, no site-packages, nothing to install into. Relaying that sentence sent a
+# real user (15k-photo archive, Windows 11) through a pip install that silently did
+# nothing, then on to "reinstall LocalLens". Never pass it through: strip the command
+# and state what is actually true — the build is missing a component, so update the app.
+_PIP_INSTRUCTION_RE = re.compile(r"\s*Run:\s*pip install\s+\S+\.?", re.IGNORECASE)
+_MISSING_LIB_RE = re.compile(r"['\"]([\w.-]+)['\"]\s+library is not installed", re.IGNORECASE)
+
+
+def _feature_unavailable_in_build(detail: Any) -> Dict[str, Any]:
+    """Turn a backend 501 into guidance the user can actually act on."""
+    text = detail if isinstance(detail, str) else str(detail)
+    lib = _MISSING_LIB_RE.search(text)
+    component = f" (missing component: {lib.group(1)})" if lib else ""
+    return {
+        "error": "feature_unavailable_in_build",
+        "message": (
+            f"This LocalLens feature is not available in the installed build of the "
+            f"LocalLens desktop app{component}."
+        ),
+        "guidance": (
+            "Tell the user their LocalLens app needs updating to use this feature, and "
+            "point them at the in-app updater or a fresh download. "
+            "⛔ Do NOT run pip install, and do NOT suggest the user run pip install or "
+            "any other command — the LocalLens backend ships as a self-contained bundle "
+            "with no pip and no site-packages, so installing a Python package cannot fix "
+            "this and will waste the user's time. Updating the app is the only fix. "
+            "Do not suggest reinstalling or repairing the app beyond a normal update, "
+            "and do not offer to work around it by inspecting their files yourself."
+        ),
+        # Kept for debugging only, with the executable instruction removed.
+        "backend_detail": _PIP_INSTRUCTION_RE.sub("", text).strip(),
+    }
+
+
 def _handle_error(e: Exception) -> Dict[str, Any]:
     if isinstance(e, httpx.HTTPStatusError):
         try:
-            return {"error": e.response.json()}
+            body = e.response.json()
         except ValueError:
-            return {"error": e.response.text}
+            body = e.response.text
+        if e.response.status_code == 501:
+            detail = body.get("detail", body) if isinstance(body, dict) else body
+            return _feature_unavailable_in_build(detail)
+        return {"error": body}
     return {"error": str(e)}
 
 
@@ -425,6 +469,11 @@ def register_pro_tools(mcp: FastMCP):
           considered duplicates (default 0.95 = nearly identical)
 
         Returns groups of duplicate files that the user can review.
+
+        On a large archive (tens of thousands of photos) hashing can outlive the wait
+        window and this returns status="still_running" instead of the groups. That is
+        healthy — the scan continues in the background. Report the progress and STOP;
+        call get_job_progress again only when the user next asks.
         """
         normalized_source = os.path.expanduser(source_folder or "")
         if not normalized_source or not os.path.isdir(normalized_source):
@@ -438,13 +487,34 @@ def register_pro_tools(mcp: FastMCP):
 
         try:
             async with httpx.AsyncClient() as client:
+                # One job at a time — see _reject_if_job_running for why.
+                busy = await _reject_if_job_running(client)
+                if busy:
+                    return busy
                 r = await client.post(
                     f"{get_locallens_url()}/api/find-duplicates",
                     json=payload,
-                    timeout=120,  # Large folders can take a while to hash
+                    timeout=120,  # Older backends hash inline before responding.
                 )
                 r.raise_for_status()
                 result = r.json()
+
+                # Two backend generations answer this endpoint. The older one hashes
+                # inline and returns the groups on the POST; the newer one queues a
+                # background job and reports through /api/job-status, because a 15k-photo
+                # archive takes far longer to hash than any sane HTTP timeout. The MCP
+                # ships independently of the desktop app, so both are live in the wild —
+                # tell them apart by whether the groups came back, not by version.
+                if "duplicate_groups" not in result:
+                    # assume_started: the POST above confirmed this job started, so the
+                    # stale-state guard must not wait to sample is_active=True — a small
+                    # folder finishes hashing inside the first poll interval and would
+                    # otherwise be reported as "still_running" until the timeout.
+                    result = await _wait_for_completion(
+                        client, _DEFAULT_WAIT_S, 1.0, assume_started=True
+                    )
+                    if result.get("status") != "complete":
+                        return result
 
                 # Inject next-action suggestions when duplicates are found
                 if result.get("total_duplicates", 0) > 0:
