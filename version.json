@@ -15,6 +15,14 @@
     },
     "changelog": [
       {
+        "version": "1.1.2",
+        "date": "August 2026",
+        "highlights": [
+          "Deleting duplicate photos stored on a network drive or NAS now works. Every file used to fail with a \"path not found\" error, even though the preview had just reported success.",
+          "When a LocalLens operation fails, the assistant now reports it and points you at the bug-report form instead of trying to diagnose the app itself. It will also never remove your photos by another route, so deletions always go through the Trash, where they stay recoverable."
+        ]
+      },
+      {
         "version": "1.1.1",
         "date": "August 2026",
         "highlights": [

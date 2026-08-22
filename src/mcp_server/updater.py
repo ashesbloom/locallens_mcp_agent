@@ -55,7 +55,7 @@ if not logger.handlers:
 # ── Constants ──────────────────────────────────────────────────────────────────
 
 # Current version of this MCP package — bump this on every release
-MCP_VERSION = "1.1.1"
+MCP_VERSION = "1.1.2"
 
 # How often to check for updates (hours). Users never get hammered.
 TTL_HOURS = 24
