@@ -96,6 +96,52 @@ def _feature_unavailable_in_build(detail: Any) -> Dict[str, Any]:
     }
 
 
+# LocalLens ships as a closed-source, self-contained bundle (Business Source License 1.1).
+# When a Pro tool fails there is no source present for an assistant to read and nothing it
+# can patch, so an assistant that treats the failure as something to investigate is spending
+# the user's time on a dead end. Name the remedy — report it — and stop.
+_SUPPORT_URL = "https://locallensmcp.vercel.app/#contact"
+_ISSUES_URL = "https://github.com/ashesbloom/locallens_mcp_agent/issues"
+
+_REPORT_GUIDANCE = (
+    "Report this to the user in plain language, then stop. LocalLens is closed-source "
+    "(Business Source License 1.1) and ships as a self-contained bundle, so there is no "
+    "source here to inspect, diagnose or patch — this is a defect to report, not one to "
+    f"investigate. The bug-report form at {_SUPPORT_URL} reaches the maintainer directly; "
+    f"a detailed write-up can go to {_ISSUES_URL}."
+)
+
+# A failed delete is the dangerous one. The obvious workaround — removing the files with a
+# shell command or a script — bypasses the OS Trash that delete_duplicates deliberately
+# routes through, turning a recoverable operation into permanent loss of the user's photos.
+# Reported by a customer whose Windows network share failed every delete; see
+# tests/test_unc_path_delete.py for the full chain.
+_DELETE_FAILED_GUIDANCE = (
+    "⛔ Do NOT remove, move or trash these files by any other route — not with a shell "
+    "command, not with a script, not with any other tool. delete_duplicates sends files to "
+    "the OS Trash so the user can recover them; every other route erases them permanently. "
+    "If the deletion did not succeed here, it must not happen at all. " + _REPORT_GUIDANCE
+)
+
+
+def _canonical(path: str) -> str:
+    r"""
+    expanduser + normpath — the idiom status.py already uses for ignore lists.
+
+    normpath is the load-bearing half. On Windows os.path IS ntpath, whose normpath folds
+    '/' into '\' — the step that makes send2trash recognise '//server/share/...' as a UNC
+    path and build a resolvable '\\?\UNC\server\share\...' instead of the
+    '\\?\//server/share/...' that Windows rejects. '\\?\' is the only Win32 path form
+    that refuses forward slashes, which is why a scan and a dry run both pass on a path the
+    real delete then fails on.
+
+    On POSIX os.path is posixpath, whose normpath leaves backslashes alone because they are
+    legal filename characters there. So this needs no sys.platform guard — os.path is
+    already the correct module on each.
+    """
+    return os.path.normpath(os.path.expanduser(path))
+
+
 def _handle_error(e: Exception) -> Dict[str, Any]:
     if isinstance(e, httpx.HTTPStatusError):
         try:
@@ -105,6 +151,11 @@ def _handle_error(e: Exception) -> Dict[str, Any]:
         if e.response.status_code == 501:
             detail = body.get("detail", body) if isinstance(body, dict) else body
             return _feature_unavailable_in_build(detail)
+        # 5xx is the backend failing, not the caller — a genuine defect worth reporting.
+        # 4xx (bad arguments) and connection errors ("LocalLens is not running") are fixed
+        # by the caller or the user, so pointing those at the maintainer misdirects both.
+        if e.response.status_code >= 500:
+            return {"error": body, "guidance": _REPORT_GUIDANCE}
         return {"error": body}
     return {"error": str(e)}
 
@@ -475,7 +526,10 @@ def register_pro_tools(mcp: FastMCP):
         healthy — the scan continues in the background. Report the progress and STOP;
         call get_job_progress again only when the user next asks.
         """
-        normalized_source = os.path.expanduser(source_folder or "")
+        # Canonical, not just expanded: the backend joins this root with os.path.join, so a
+        # forward-slash UNC root ("//server/share") would otherwise produce hybrid-separator
+        # paths that later break delete. See _canonical.
+        normalized_source = _canonical(source_folder or "")
         if not normalized_source or not os.path.isdir(normalized_source):
             return {"error": f"Source path is not a valid directory: {normalized_source}"}
 
@@ -1025,8 +1079,11 @@ def register_pro_tools(mcp: FastMCP):
         if not file_paths:
             return {"error": "file_paths list is empty. Run find_duplicates() first to get the list."}
 
+        # These come back from find_duplicates and round-trip through the model, so they
+        # arrive exactly as the backend stored them — including hybrid separators on a
+        # Windows network share, which send2trash then turns into an unresolvable path.
         payload = {
-            "file_paths": file_paths,
+            "file_paths": [_canonical(p) for p in file_paths],
             "dry_run": dry_run,
         }
 
@@ -1039,6 +1096,13 @@ def register_pro_tools(mcp: FastMCP):
                 )
                 r.raise_for_status()
                 result = r.json()
+
+                # The backend answers 200 even when every file failed, so _handle_error
+                # never sees this. Without guidance the model is left to improvise on a raw
+                # OS error — and the improvisation that loses data is deleting the files
+                # itself, outside the Trash.
+                if result.get("failed"):
+                    result["guidance"] = _DELETE_FAILED_GUIDANCE
 
                 # After a real deletion, suggest opening the folder to verify
                 if not dry_run and result.get("deleted"):
