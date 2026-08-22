@@ -124,6 +124,52 @@ which never executes `__boot__.py`. Every bundle user was therefore told to run
 `_is_bundled()` from `src/mcp_server/updater.py`, which also checks whether any
 parent of `sys.executable` ends in `.app`.
 
+## An undeclared dependency ships a dead feature, silently
+
+`find_duplicates` was broken in **every build ever shipped**. `backend/main.py`
+did `import imagehash` inside the endpoint body, against a package that appeared
+in no requirements file — so the endpoint answered 501 for every user while
+looking perfectly healthy from here.
+
+Four layers all reported green, and it is worth knowing why each missed it:
+
+- **PyInstaller / py2app** only *warn* about unresolved imports — and a deferred
+  import inside a function body is not in the startup graph at all.
+- **The CI smoke test** runs `--claude-status`, which walks the *startup* import
+  graph. A function-level import does not execute until someone calls it.
+- **pytest** never imported it either; the tests mock the backend.
+- **The dev venv had the package.** This is the trap that makes it invisible: a
+  build made locally works, and only CI's fresh venv reproduces the failure.
+
+Gated since v1.1.2 by `scripts/check_optional_imports.py` — preflight check 7,
+plus a `build-check.yml` step placed *before* `pip install`, because the script is
+pure stdlib and fails in seconds. It fails when a third-party import is declared
+in no dependency file. A module that is genuinely fine while undeclared goes in
+its `ACKNOWLEDGED` map **with a reason**: `imagehash` was also wrapped in
+`try/except ImportError`, and its except branch raised a 501 that killed a whole
+feature. Guarded is not the same as harmless.
+
+Two things it cannot see, by construction:
+
+- **Transitive deps.** `fastapi` requires `starlette`, so importing starlette works
+  though no file names it. Pass `--acknowledge starlette`.
+- **A dependency's own optional extras.** `send2trash` chooses its Windows backend
+  on whether `pywin32` imports, inside its own package — nothing here names it.
+  That gap is exactly what produced the v1.1.2 UNC delete bug.
+
+Run it against the backend repo too; that is where the dead features are:
+
+```bash
+python scripts/check_optional_imports.py \
+  --source <path-to>/LocalLens/backend \
+  --requirements <path-to>/LocalLens/backend/requirements.txt \
+  --acknowledge starlette
+```
+
+As of 2026-08-22 that reports `reportlab`, `apscheduler` and `watchdog` — all
+present in the dev venv, none in `requirements.txt`, so `export_report`'s PDF and
+the scheduler daemon are dead in shipped builds for the imagehash reason.
+
 ## Shipped prose is application behaviour
 
 `docs/TESTING.md` is a behavioural acceptance suite that pins **exact sentences**

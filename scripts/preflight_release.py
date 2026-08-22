@@ -18,6 +18,7 @@ Checks
 4. Release notes exist, fully substituted, and free of the dead domain
 5. Test suite green
 6. Tag v<version> does not already exist (locally or on the remote)
+7. Every third-party import is declared (see scripts/check_optional_imports.py)
 
 Why check 3 is inverted
 -----------------------
@@ -166,6 +167,23 @@ def check_tests() -> None:
     check(proc.returncode == 0, "test suite green", summary)
 
 
+def check_optional_imports() -> None:
+    """
+    The gate that would have stopped the imagehash release. A deferred import of an
+    undeclared package is invisible to PyInstaller, to the CI startup smoke test, and
+    to pytest — it only fails for the user who calls that one feature.
+    """
+    proc = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "check_optional_imports.py")],
+        cwd=ROOT, capture_output=True, text=True,
+    )
+    detail = " / ".join(
+        line.strip().lstrip("\u274c ") for line in proc.stdout.splitlines()
+        if line.strip().startswith("\u274c")
+    )
+    check(proc.returncode == 0, "every third-party import is declared", detail)
+
+
 def check_tag_free(version: str) -> None:
     tag = f"v{version}"
     local = git("tag", "--list", tag)
@@ -193,6 +211,7 @@ def main() -> int:
     check_versions(version)
     check_release_notes(version)
     check_tests()
+    check_optional_imports()
     check_tag_free(version)
 
     print()

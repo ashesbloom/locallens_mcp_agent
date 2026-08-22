@@ -20,6 +20,14 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
+      # Runs before the install on purpose: it is pure stdlib, needs nothing
+      # installed, and fails in seconds. An undeclared import is invisible to
+      # PyInstaller, to the release smoke test and to a dev venv that happens to
+      # have the package — it only breaks for users. See the script's docstring.
+      - name: Audit optional imports
+        run: |
+          python scripts/check_optional_imports.py
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
