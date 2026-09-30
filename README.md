@@ -247,8 +247,8 @@ LocalLens MCP is a strictly local server. It:
 - Discovers the LocalLens backend automatically via `~/.config/LocalLens/port.txt`
 - Stores the Pro license cache at `~/.config/LocalLens/mcp_license.json` (local only)
 
-A lifetime license makes **exactly one** network request, ever: activation. Nothing after it.
-A subscription re-checks periodically to confirm it is still active — no photos, paths or
+A non-expiring key (the free keys for founding users) makes **exactly one** network request,
+ever: activation. Nothing after it. A subscription re-checks periodically to confirm it is still active — no photos, paths or
 metadata are sent either way, only the license key.
 
 ---

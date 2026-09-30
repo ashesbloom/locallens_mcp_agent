@@ -5,15 +5,16 @@
 > LL Agent). Lemon-specific mechanics below — fee maths, variant UUIDs, the discount-code
 > checkout URL, the licence API response shape — are stale until re-derived for Dodo. The
 > site side is done (`locallensmcp/src/server/pricing.ts` builds Dodo static checkout
-> links; the founding lifetime CTA fails closed to `#` until a server-side Checkout
-> Session pre-applies FOUNDING100, which static links cannot). `src/mcp_server/license.py` still calls the Lemon licence API; porting it to
+> links). **2026-10-01: there is no lifetime plan** — Pro is yearly or monthly only, and
+> `FOUNDING100` now means the existing preview users, who get Pro free (see PRICING.md,
+> *Founding 100*). Any lifetime/founding-discount step below is obsolete. `src/mcp_server/license.py` still calls the Lemon licence API; porting it to
 > Dodo's `/licenses/activate|validate` waits for a Dodo test-mode key, and must land before
 > `FREE_PREVIEW` flips off.
 
 > How to end the free preview and turn the paid tier back on.
 >
 > **Nothing was deleted to build the preview.** The band map, the Lemon Squeezy
-> checkout builder, `FOUNDING100`, all ten variant slots, `pro_upgrade_message()` and
+> checkout builder, every product-ID slot, `pro_upgrade_message()` and
 > its five guarding tests, the Pro/paid copy in the tray, and the Band A list-price
 > offer are all still in the tree, intact and unreached. Restoring paid mode changes
 > **constants**, not logic. If you find yourself rewriting a function, stop — you have
@@ -56,30 +57,20 @@ tool — or the site quoting a price for something the MCP gives away — makes 
 both. There is no test that can catch this; the repos are separate.
 
 Flipping the website flag alone restores, with no further edits: the regional band
-resolution, the `$49`/`₹249` frames, the Founding-100 line, the `claim →` / `get pro →`
-CTAs, and the "wrong currency?" link (it is wrapped in `{!FREE_PREVIEW && …}`, not
+resolution, the `$49`/`₹249` Yearly frames (plus Monthly where enabled), the `get pro →` /
+`subscribe →` CTAs, and the "wrong currency?" link (it is wrapped in `{!FREE_PREVIEW && …}`, not
 deleted).
 
 ## 3. Fill in the Dodo Payments store details
 
 `locallensmcp/src/server/pricing.ts`
 
-- [ ] Paste the Dodo product IDs into `BAND_PRICING` (`lifetimeProductId`,
-      `annualProductId`, `monthlyProductId` per band). Empty strings make `checkoutUrl()`
+- [ ] Paste the Dodo product IDs into `BAND_PRICING` (`annualProductId`,
+      `monthlyProductId` per band). Empty strings make `checkoutUrl()`
       return `"#"` — that is the guard against shipping a dead checkout, not a bug.
-- [ ] Founding lifetime: build the server-side Checkout Session endpoint that
-      pre-applies `FOUNDING100` — until then `checkoutUrl()` returns `"#"` for it.
-- [ ] Set `FOUNDING_ENDS_AT` to the same date as the `FOUNDING100` discount's
-      expiry in Dodo. It currently holds a stale placeholder
-      (`2026-10-07`) that is inert only because the preview short-circuits before it is
-      read — it goes live the instant step 2 lands.
 - [ ] Decide `MONTHLY_ENABLED`. Independent of everything above. Enforcement is ready
       and tested (`tests/test_license_expiry.py`); bands C and D stay annual-only
       regardless.
-- [ ] Update `FALLBACK_OFFER`'s founding label in
-      `locallensmcp/src/content/pricing.ts` to match `FOUNDING_ENDS_AT`. It reads from
-      `LIST_PRICE_OFFER`, which is already the correct Band A shape — only the date
-      string inside it needs to agree.
 
 ## 4. Revert the preview-specific copy
 

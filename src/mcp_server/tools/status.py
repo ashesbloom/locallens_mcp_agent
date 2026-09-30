@@ -869,7 +869,7 @@ def register_status(mcp: FastMCP):
                 "instance_id": license_info.get("instance_id"),
             }
             # Neither the price nor the billing model is stated here. Both are variable
-            # now — regional bands, and a founding lifetime offer that closes — so
+            # now — regional bands, and yearly vs monthly per region — so
             # asserting either is the same failure as asserting a price. See
             # docs/PRICING.md; the pricing page is the only source of truth.
             if FREE_PREVIEW:

@@ -5,8 +5,9 @@
 > LL Agent). Lemon-specific mechanics below — fee maths, variant UUIDs, the discount-code
 > checkout URL, the licence API response shape — are stale until re-derived for Dodo. The
 > site side is done (`locallensmcp/src/server/pricing.ts` builds Dodo static checkout
-> links; the founding lifetime CTA fails closed to `#` until a server-side Checkout
-> Session pre-applies FOUNDING100, which static links cannot). `src/mcp_server/license.py` still calls the Lemon licence API; porting it to
+> links). **2026-10-01: there is no lifetime plan** — Pro is yearly or monthly only, and
+> `FOUNDING100` now means the existing preview users, who get Pro free (see PRICING.md,
+> *Founding 100*). Any lifetime/founding-discount step below is obsolete. `src/mcp_server/license.py` still calls the Lemon licence API; porting it to
 > Dodo's `/licenses/activate|validate` waits for a Dodo test-mode key, and must land before
 > `FREE_PREVIEW` flips off.
 
@@ -23,13 +24,13 @@ Pricing rationale lives in [PRICING.md](PRICING.md); don't re-litigate it here.
       itself lives server-only in `src/server/pricing.ts`, kept out of the client bundle
       by `importProtection` in `vite.config.ts`
 - [x] Contact-sheet pricing page (`src/components/site/Pricing.tsx`) with the two
-      purchase paths (lifetime-during-founding-window / annual after, plus an optional
-      monthly frame gated by `MONTHLY_ENABLED`)
+      purchase paths (yearly, plus a monthly frame gated by `MONTHLY_ENABLED`). The
+      lifetime/founding-window path was removed 2026-10-01 — there is no lifetime plan
 - [x] Seven stale "one-time purchase, no subscription" claims removed (5 Python, 2
       website); Smart Album Suggestions removed from all marketing surfaces (it returns
       `{"status": "coming_soon"}` — was being sold as live in 12 places)
-- [x] License expiry enforcement shipped — `src/mcp_server/license.py`: lifetime keys
-      (`expires_at: null`) never re-check; subscriptions get a 7-day pre-expiry refresh
+- [x] License expiry enforcement shipped — `src/mcp_server/license.py`: non-expiring keys
+      (`expires_at: null`, now only the free founding-user keys) never re-check; subscriptions get a 7-day pre-expiry refresh
       window and a 14-day offline grace before locking. 9 dedicated tests in
       `tests/test_license_expiry.py`
 - [x] BSL Change Date bumped `2026-07-18` → `2030-08-08`; `Licensed Work` scoped to
@@ -50,9 +51,8 @@ design. Nobody can buy anything yet — see Phase 2.
 
 - [x] **Band D price.** ₹249/year, confirmed and shipped in `BAND_PRICING`. Nets ~$2.24
       after Lemon Squeezy fees.
-- [ ] **Founding window close date.** Still open, and deliberately *not* to be set yet —
-      see Phase 2. `FOUNDING_ENDS_AT` in `src/server/pricing.ts` currently holds a
-      placeholder (`2026-10-07T00:00:00Z`) that must not be mistaken for a real deadline.
+- [x] ~~Founding window close date~~ — moot 2026-10-01: no lifetime plan, no founding
+      window. `FOUNDING100` now means the existing users get Pro free (PRICING.md).
 
 ---
 
@@ -93,14 +93,8 @@ Deliberate properties of this state, so they aren't mistaken for bugs later:
   while there's nothing to discreetly price — and the band map is tree-shaken out of
   even the server bundle.
 - The Pro CTA points at `/#download` instead of a dead `"#"` checkout link.
-- The founding line is hidden (`founding: null`) — no countdown against a store that
-  can't take an order.
-
-**Guardrail:** `FOUNDING_ENDS_AT` is a wall-clock constant that ticks whether or not a
-store exists. Don't set it to a real date until Lemon Squeezy actually approves — that's
-the first step of Phase 3. It's currently inert (the preview short-circuits before it's
-read), but it becomes live the instant `FREE_PREVIEW` flips, so check it's still in the
-future at that moment.
+- The launch price shows as "Launching soon", with the free-for-early-users promise
+  under it.
 
 ### Grandfathering — decided
 
@@ -130,24 +124,16 @@ Full step-by-step for undoing the preview is in
 - [ ] **Set `_PREVIEW_CUTOFF`** in `src/mcp_server/license.py` to the paid-launch date
       **before** flipping either `FREE_PREVIEW`. Order matters: flip the preview off with
       no cutoff set and every existing user loses the grandfathering they were promised.
-- [ ] **Confirm the founding window close date** now that there's a real timeline, and
-      set it in three places: Lemon Squeezy, `FOUNDING_ENDS_AT` in `src/server/
-      pricing.ts`, and `docs/PRICING.md`
 - [ ] **Create Product 1 — "LocalLens Pro"** (subscription), six variants:
       `A Monthly $4.99` · `A Annual $49` · `B Monthly $2.99` · `B Annual $29` ·
       `C Annual $19` · `D Annual ₹249`
-- [ ] **Create Product 2 — "LocalLens Pro — Lifetime"** (one-time payment), four variants
-      at **list** price: `A $98` · `B $58` · `C $38` · `D ₹498`
-- [ ] **Enable license key generation on all ten variants.** Activation limit **3**.
-- [ ] **Create the `FOUNDING100` discount:**
-      - 50% off
-      - `max_redemptions: 100`
-      - `expires_at:` the date confirmed above
-      - limited to the four **Lifetime** variants only
-- [ ] **Test the cap before trusting it.** In test mode, temporarily set
-      `max_redemptions: 2`, buy twice, confirm the third attempt is rejected. Then set
-      it back to 100.
-- [ ] **Copy the ten variant UUIDs** from each checkout URL (`/buy/<uuid>`).
+- [ ] **No lifetime product.** Pro is yearly or monthly only (decided 2026-10-01).
+- [ ] **Enable license key generation on all six variants.** Activation limit **3**.
+- [ ] **Decide how founding users get a key** (the existing preview users, who get Pro
+      free — see PRICING.md, *Founding 100*): a `FOUNDING100` code at 100% off Yearly, or
+      keys issued by hand. If a code, confirm in test mode that it discounts **every
+      renewal**, not just the first charge. Never publish it on the site.
+- [ ] **Copy the six product IDs** from each checkout link (`/buy/<product_id>`).
 
 ---
 
@@ -156,15 +142,12 @@ Full step-by-step for undoing the preview is in
 In `locallensmcp/src/server/pricing.ts` (not `content/pricing.ts` — the band map and
 variant IDs are server-only, enforced by `importProtection`):
 
-- [ ] Paste the Dodo product IDs into `BAND_PRICING` — `lifetimeProductId`,
-      `annualProductId`, and (if `MONTHLY_ENABLED`) `monthlyProductId` per band. Until filled, the Buy button
+- [ ] Paste the Dodo product IDs into `BAND_PRICING` — `annualProductId`, and (if
+      `MONTHLY_ENABLED`) `monthlyProductId` per band. Until filled, the Buy button
       deliberately stays inert (`checkoutUrl()` returns `"#"` on an empty string), so a
       half-configured store can't ship a dead link that looks live.
-- [ ] Confirm `FOUNDING_ENDS_AT` (set in Phase 3) is correct — `isFoundingOpen()` reads
-      it fresh on every request, so no redeploy is needed for the window to close, only
-      for it to open with the right date.
-- [ ] Decide separately whether to flip `MONTHLY_ENABLED` to `true` — it's independent
-      of the founding date and gated behind `pricing.monthly !== null` per band (Bands
+- [ ] Flip `MONTHLY_ENABLED` to `true` if monthly is on sale at launch (Pro is yearly +
+      monthly) — gated behind `pricing.monthly !== null` per band (Bands
       C/D have no monthly regardless: a ₹79/month charge loses ~60% to Lemon Squeezy's
       flat $0.50 fee).
 
@@ -190,7 +173,7 @@ configured."` and nothing is logged anywhere you'd notice.
 
 ## Phase 5 — End-to-end purchase test (30 minutes)
 
-- [ ] Buy a Lifetime variant in Lemon Squeezy **test mode**
+- [ ] Buy a Yearly variant in Dodo **test mode**
 - [ ] Confirm the license key arrives by email
 - [ ] `activate_pro_license(license_key="...")` in Claude Desktop
 - [ ] Confirm `~/.config/LocalLens/mcp_license.json` is written, with `expires_at`
@@ -247,9 +230,5 @@ a licensing gate:
 - [x] ~~Implement `expires_at` enforcement before the first subscription renews~~ — done
       in Phase 0, ahead of schedule (needed for `MONTHLY_ENABLED` to be safe to flip at
       all)
-- [ ] **Watch the founding count.** Lemon Squeezy stops the code at 100, but the website
-      has no idea and keeps advertising the offer. When it sells out, set
-      `FOUNDING_ENDS_AT` to a past date and redeploy.
-- [ ] **Watch the founding date generally**, not just the count — see the Phase 2
-      guardrail. A date that already passed silently converts Lifetime to Annual and
-      drops the founding banner; nothing alerts you when that happens.
+- [ ] **Honour founding users.** Anyone who writes in through "Pro licensing" saying they
+      used the preview gets a free key, no proof asked (PRICING.md).

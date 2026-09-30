@@ -5,8 +5,9 @@
 > LL Agent). Lemon-specific mechanics below — fee maths, variant UUIDs, the discount-code
 > checkout URL, the licence API response shape — are stale until re-derived for Dodo. The
 > site side is done (`locallensmcp/src/server/pricing.ts` builds Dodo static checkout
-> links; the founding lifetime CTA fails closed to `#` until a server-side Checkout
-> Session pre-applies FOUNDING100, which static links cannot). `src/mcp_server/license.py` still calls the Lemon licence API; porting it to
+> links). **2026-10-01: there is no lifetime plan** — Pro is yearly or monthly only, and
+> `FOUNDING100` now means the existing preview users, who get Pro free (see PRICING.md,
+> *Founding 100*). Any lifetime/founding-discount step below is obsolete. `src/mcp_server/license.py` still calls the Lemon licence API; porting it to
 > Dodo's `/licenses/activate|validate` waits for a Dodo test-mode key, and must land before
 > `FREE_PREVIEW` flips off.
 
@@ -35,12 +36,12 @@ Four coarse bands, not per-country pricing. Anchors are **$4.99/mo** high-income
 **₹249/yr** India — those two choices imply the ~5× spread, and B and C are even steps
 inside it.
 
-| Band | Monthly | Annual | Founding lifetime | Lifetime list |
-|---|---|---|---|---|
-| **A** High income | $4.99 | **$49** | **$49** | $98 |
-| **B** Upper-mid | $2.99 | **$29** | **$29** | $58 |
-| **C** Mid | — | **$19** | **$19** | $38 |
-| **D** Emerging | — | **₹249** | **₹249** | ₹498 |
+| Band | Monthly | Annual |
+|---|---|---|
+| **A** High income | $4.99 | **$49** |
+| **B** Upper-mid | $2.99 | **$29** |
+| **C** Mid | — | **$19** |
+| **D** Emerging | — | **₹249** |
 
 Annual is 10× monthly — two months free.
 
@@ -91,48 +92,28 @@ revenue forecasts on it.
 
 ---
 
-## Founding 100
+## Founding 100 — the existing users, free
 
-**Offer:** the first 100 customers worldwide pay once and keep Pro forever — one year's
-price for permanent access.
+**Decided 2026-10-01. There is no lifetime plan.** Pro is sold only as a yearly or a monthly
+subscription, at regional prices (bands above). An earlier version of this section sold a
+one-time "lifetime" licence to the first 100 buyers via a 50%-off code; that is withdrawn
+entirely, and the site no longer contains the lifetime option or its countdown.
 
-**Mechanism:** Lemon Squeezy has no inventory limit on digital products, but discount codes
-do have redemption limits. Lifetime *list* prices are set at exactly 2× the founding price
-so a single global code produces the right number in every band:
+**`FOUNDING100` now names the users who are already here** — everyone using LL Agent during
+the free preview (about 100 people at the time of the decision). They are the founding
+hundred, and they get Pro **free, permanently**. This is the same promise as *Free preview —
+grandfathering* below, given a name; that section is the authority on who qualifies.
 
-```
-code                    FOUNDING100
-type                    50% off
-is_limited_redemptions  true
-max_redemptions         100
-is_limited_to_products  true  → scoped to the four Lifetime variants only
-```
+Most founding users need nothing: the MCP detects a pre-launch install locally and keeps Pro
+unlocked (`installed_before_cutoff()` in `src/mcp_server/license.py`). A code or key is only
+for the ones it cannot detect — a reinstall, a new machine.
 
-$98→$49 · $58→$29 · $38→$19 · ₹498→₹249
-
-Lemon Squeezy rejects the 101st redemption itself, atomically, with one counter shared
-across all bands. That is the intended semantics — first 100 *worldwide*, not per region.
-The strike-through price is genuine, so the discount is honest.
-
-**Window closes at 100 sales OR `<SET DATE AT LAUNCH — 60 days is a sane default>`,
-whichever comes first.** Lemon Squeezy enforces **both**: `max_redemptions` caps the count
-and the discount object's `expires_at` field caps the date. Set the same date in
-`FOUNDING_ENDS_AT` (`locallensmcp/src/server/pricing.ts`) so the page stops advertising an
-offer that checkout would refuse.
-
-The **count** is the one thing that does not sync — Lemon Squeezy stops the code at 100 but
-cannot tell the website, so it keeps advertising. When it sells out, set `FOUNDING_ENDS_AT`
-to a past date and redeploy.
-
-**Status as of 2026-08-12: not armed.** Lemon Squeezy rejected the store application (no
-live public site/social/customer base yet — see `LAUNCH_CHECKLIST.md` Phase 2). The
-`2026-10-07T00:00:00Z` currently in `FOUNDING_ENDS_AT` is a leftover placeholder, not a
-real deadline — there is no store for it to correspond to. Don't set the real date until
-Lemon Squeezy approves; that's the first step of `LAUNCH_CHECKLIST.md` Phase 3.
-
-**Rejected alternatives:** manually unpublishing the variant at 100 (races past the cap);
-a webhook + API integration to disable variants (needs a server and an API key to solve
-what a coupon field already solves).
+**Open at store setup (Dodo):** how a founding user who needs a key gets one. The two
+candidates: a `FOUNDING100` discount code at 100% off the Yearly product, or keys issued by
+hand from the Dodo dashboard. If it is a code, verify in test mode that a 100% discount on a
+subscription applies to **every renewal**, not just the first charge — otherwise founding
+users get billed in year two, which breaks the promise. Never publish the code on the site;
+hand it out through the contact form's "Pro licensing" route.
 
 ---
 
@@ -161,7 +142,7 @@ Eligibility is therefore established locally, two ways, and generously:
 `~/.config/LocalLens/mcp_onboarded.json` with an `onboarded_at` timestamp. If it predates
 `_PREVIEW_CUTOFF` (`src/mcp_server/license.py`, the paid-launch date), Pro stays unlocked
 forever. No key, no activation, no network call — the privacy claim stays literally true
-for these users, as it does for lifetime buyers.
+for these users, as it does for anyone holding a non-expiring key.
 
 Absent or unparseable markers resolve to **eligible**. That is deliberate and matches
 `_parse_expiry()`'s permissive reading of a bad `expires_at`: erring the other way locks
@@ -202,15 +183,6 @@ desktop, and one reinstall. The local cache is machine-locked by SHA-256 of host
 | B Annual | $29 | `<fill in>` |
 | C Annual | $19 | `<fill in>` |
 | D Annual | ₹249 | `<fill in>` |
-
-**Product 2 — "LocalLens Pro — Lifetime"** (one-time payment)
-
-| Variant | List | Founding | Checkout UUID |
-|---|---|---|---|
-| A Lifetime | $98 | $49 | `<fill in>` |
-| B Lifetime | $58 | $29 | `<fill in>` |
-| C Lifetime | $38 | $19 | `<fill in>` |
-| D Lifetime | ₹498 | ₹249 | `<fill in>` |
 
 **Refund policy:** 14 days, no questions asked; the license key is revoked on refund.
 
@@ -282,13 +254,15 @@ carries the billing country — observe, don't block.
 
 ## Licensing code — shipped
 
-**The MCP server enforces both lifetime and subscription licenses.**
+**The MCP server enforces both non-expiring and subscription licenses.** (The code and
+`README.md` call a non-expiring key "lifetime"; there is no lifetime *plan* — such keys
+exist only as free keys for founding users. Rename with the Dodo port of `license.py`.)
 `is_pro_active()` (`src/mcp_server/license.py`) returns true when `expires_at is None`
-(lifetime — unlocked permanently and offline, exactly one network call ever) or when
+(non-expiring — unlocked permanently and offline, exactly one network call ever) or when
 `now` is still inside `expires_at` plus a 14-day offline grace. Within 7 days of expiry,
 `refresh_license_if_stale()` attempts one re-validation and rewrites the cache; on
 network failure the grace window covers it. `README.md`'s privacy claim is worded to
-match: one request ever for lifetime, periodic re-checks (key only, no photos/paths) for
+match: one request ever for a non-expiring key, periodic re-checks (key only, no photos/paths) for
 subscriptions. 9 tests in `tests/test_license_expiry.py` cover all four behaviours,
 mutation-tested against the old always-true `is_pro_active()`.
 
@@ -303,3 +277,6 @@ already exists by the time it's needed.
 
 - **2026-08-08** — initial decision. Four bands; $4.99/mo and ₹249/yr anchors; C and D
   annual-only on transaction-fee grounds; Founding-100 via a capped 50% discount code.
+- **2026-10-01** — no lifetime plan: Pro is yearly or monthly only. `FOUNDING100` now
+  means the existing free-preview users, who get Pro free permanently. Provider is Dodo
+  Payments.
