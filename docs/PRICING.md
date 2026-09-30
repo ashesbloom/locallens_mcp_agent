@@ -1,5 +1,15 @@
 # Pricing — LocalLens Pro
 
+> **2026-09-30 — payment provider switched to Dodo Payments.** Lemon Squeezy declined the
+> store; LL Agent now applies to Dodo Payments as an individual (Mayank Pandey, trading as
+> LL Agent). Lemon-specific mechanics below — fee maths, variant UUIDs, the discount-code
+> checkout URL, the licence API response shape — are stale until re-derived for Dodo. The
+> site side is done (`locallensmcp/src/server/pricing.ts` builds Dodo static checkout
+> links; the founding lifetime CTA fails closed to `#` until a server-side Checkout
+> Session pre-applies FOUNDING100, which static links cannot). `src/mcp_server/license.py` still calls the Lemon licence API; porting it to
+> Dodo's `/licenses/activate|validate` waits for a Dodo test-mode key, and must land before
+> `FREE_PREVIEW` flips off.
+
 **Status:** canonical. Decided 2026-08-08.
 **Authority:** Lemon Squeezy is the source of truth for what a customer is actually charged.
 This document is the reference the store and the website are built from; if they disagree,

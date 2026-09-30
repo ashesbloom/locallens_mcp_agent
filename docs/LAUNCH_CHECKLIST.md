@@ -1,5 +1,15 @@
 # Launch checklist — LocalLens Pro paid tier
 
+> **2026-09-30 — payment provider switched to Dodo Payments.** Lemon Squeezy declined the
+> store; LL Agent now applies to Dodo Payments as an individual (Mayank Pandey, trading as
+> LL Agent). Lemon-specific mechanics below — fee maths, variant UUIDs, the discount-code
+> checkout URL, the licence API response shape — are stale until re-derived for Dodo. The
+> site side is done (`locallensmcp/src/server/pricing.ts` builds Dodo static checkout
+> links; the founding lifetime CTA fails closed to `#` until a server-side Checkout
+> Session pre-applies FOUNDING100, which static links cannot). `src/mcp_server/license.py` still calls the Lemon licence API; porting it to
+> Dodo's `/licenses/activate|validate` waits for a Dodo test-mode key, and must land before
+> `FREE_PREVIEW` flips off.
+
 Work top to bottom. Later phases depend on earlier ones.
 Pricing rationale lives in [PRICING.md](PRICING.md); don't re-litigate it here.
 
@@ -146,8 +156,8 @@ Full step-by-step for undoing the preview is in
 In `locallensmcp/src/server/pricing.ts` (not `content/pricing.ts` — the band map and
 variant IDs are server-only, enforced by `importProtection`):
 
-- [ ] Paste the UUIDs into `BAND_PRICING` — `lifetimeVariant`, `annualVariant`, and
-      (if `MONTHLY_ENABLED`) `monthlyVariant` per band. Until filled, the Buy button
+- [ ] Paste the Dodo product IDs into `BAND_PRICING` — `lifetimeProductId`,
+      `annualProductId`, and (if `MONTHLY_ENABLED`) `monthlyProductId` per band. Until filled, the Buy button
       deliberately stays inert (`checkoutUrl()` returns `"#"` on an empty string), so a
       half-configured store can't ship a dead link that looks live.
 - [ ] Confirm `FOUNDING_ENDS_AT` (set in Phase 3) is correct — `isFoundingOpen()` reads

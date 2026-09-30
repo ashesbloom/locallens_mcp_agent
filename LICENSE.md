@@ -1,21 +1,24 @@
 # Business Source License 1.1
 
-Licensor:             LocalLens AI Inc.
+Licensor:             Mayank Pandey
 Licensed Work:        LocalLens MCP Agent v1.0.34 and later
-                      The Licensed Work is (c) 2026 LocalLens AI Inc.
+                      The Licensed Work is (c) 2026 Mayank Pandey
 
 Additional Use Grant: You may use the Licensed Work for non-production purposes,
                       including personal use, testing, development, and education,
                       without a commercial license.
 
                       Production use of Pro-tier features requires a valid license key
-                      obtained from https://locallensmcp.vercel.app/#pricing
+                      obtained from https://locallensmcp.vercel.app/pricing, except
+                      where the Licensed Work itself unlocks those features without a
+                      key, as it does during the free preview and for users who
+                      installed it before paid plans launched.
 
 Change Date:          2030-08-08
 
 Change License:       Apache License, Version 2.0
 
-License text copyright (c) 2026 LocalLens AI Inc., All Rights Reserved.
+License text copyright (c) 2024 MariaDB plc, All Rights Reserved.
 "Business Source License" is a trademark of MariaDB plc.
 
 ## Terms
@@ -61,7 +64,7 @@ License", as long as you comply with the Covenants of Licensor below.
 ## Covenants of Licensor
 
 In consideration of the right to use this License's text and the "Business Source
-License" name and trademark, Licensor covenants to LocalLens AI Inc., and to all other
+License" name and trademark, Licensor covenants to MariaDB, and to all other
 recipients of the licensed work to be provided by Licensor:
 
 To specify as the Change License the GPL Version 2.0 or any later version, or a

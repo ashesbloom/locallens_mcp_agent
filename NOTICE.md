@@ -9,8 +9,9 @@ You can:
 - Use all Free-tier tools without a license key
 
 You need a paid license key to:
-- Run Pro-tier features in production
+- Run Pro-tier features in production — except during the free preview, and never if
+  you installed before paid plans launched (you keep Pro free, permanently)
 
-Get a license key: https://your-store.lemonsqueezy.com
+Get a license key: https://locallensmcp.vercel.app/pricing
 
-On 2029-06-01, this version automatically becomes Apache 2.0 (fully open source).
+On 2030-08-08, this version automatically becomes Apache 2.0 (fully open source).

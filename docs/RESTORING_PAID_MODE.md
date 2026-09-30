@@ -1,5 +1,15 @@
 # Restoring paid mode
 
+> **2026-09-30 — payment provider switched to Dodo Payments.** Lemon Squeezy declined the
+> store; LL Agent now applies to Dodo Payments as an individual (Mayank Pandey, trading as
+> LL Agent). Lemon-specific mechanics below — fee maths, variant UUIDs, the discount-code
+> checkout URL, the licence API response shape — are stale until re-derived for Dodo. The
+> site side is done (`locallensmcp/src/server/pricing.ts` builds Dodo static checkout
+> links; the founding lifetime CTA fails closed to `#` until a server-side Checkout
+> Session pre-applies FOUNDING100, which static links cannot). `src/mcp_server/license.py` still calls the Lemon licence API; porting it to
+> Dodo's `/licenses/activate|validate` waits for a Dodo test-mode key, and must land before
+> `FREE_PREVIEW` flips off.
+
 > How to end the free preview and turn the paid tier back on.
 >
 > **Nothing was deleted to build the preview.** The band map, the Lemon Squeezy
@@ -50,15 +60,17 @@ resolution, the `$49`/`₹249` frames, the Founding-100 line, the `claim →` / 
 CTAs, and the "wrong currency?" link (it is wrapped in `{!FREE_PREVIEW && …}`, not
 deleted).
 
-## 3. Fill in the Lemon Squeezy store details
+## 3. Fill in the Dodo Payments store details
 
 `locallensmcp/src/server/pricing.ts`
 
-- [ ] Paste the ten variant UUIDs into `BAND_PRICING` (`lifetimeVariant`,
-      `annualVariant`, `monthlyVariant` per band). Empty strings make `checkoutUrl()`
+- [ ] Paste the Dodo product IDs into `BAND_PRICING` (`lifetimeProductId`,
+      `annualProductId`, `monthlyProductId` per band). Empty strings make `checkoutUrl()`
       return `"#"` — that is the guard against shipping a dead checkout, not a bug.
+- [ ] Founding lifetime: build the server-side Checkout Session endpoint that
+      pre-applies `FOUNDING100` — until then `checkoutUrl()` returns `"#"` for it.
 - [ ] Set `FOUNDING_ENDS_AT` to the same date as the `FOUNDING100` discount's
-      `expires_at` in Lemon Squeezy. It currently holds a stale placeholder
+      expiry in Dodo. It currently holds a stale placeholder
       (`2026-10-07`) that is inert only because the preview short-circuits before it is
       read — it goes live the instant step 2 lands.
 - [ ] Decide `MONTHLY_ENABLED`. Independent of everything above. Enforcement is ready
@@ -78,6 +90,8 @@ non-preview branch. None needs rewriting.
 |------|-----------------|
 | `locallensmcp/src/routes/pricing.tsx` | `SITE_DESCRIPTION` — the paid version is commented directly above the preview one |
 | `locallensmcp/src/content/copy.ts` | `titleSecond` and `contact.sub` are already the paid strings; the preview ones are separate keys (`titleSecondPreview`, `contactSubPreview`) selected by the flag, so step 2 reverts them automatically |
+| `locallensmcp/src/content/pricing.ts` | `PREVIEW_OFFER` stops being served once the flag flips (`FALLBACK_OFFER` switches to `LIST_PRICE_OFFER`) — no edit needed |
+| `locallensmcp/src/content/legal.ts` | **Hand-written, not flag-driven.** The Terms' free-preview paragraph is worded to stay true after launch, and the grandfathering sentences in Terms and Refund are permanent. Re-read all three pages, fix anything the launch made false, and bump `LAST_UPDATED` |
 | `locallensmcp/src/components/site/PreviewBanner.tsx` | Renders `null` when `FREE_PREVIEW` is false — no edit needed |
 | `src/tray/tray_mac.py`, `tray_win.py` | Plan screen — the paid text lives in the `else` branch and returns automatically |
 | `src/mcp_server/tools/status.py` | `unlocked` / `tier_label` revert with the flag; the `pro_pitch` and `pro_showcase` dicts were never removed |
