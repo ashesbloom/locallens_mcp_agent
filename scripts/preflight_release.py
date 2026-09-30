@@ -19,6 +19,8 @@ Checks
 5. Test suite green
 6. Tag v<version> does not already exist (locally or on the remote)
 7. Every third-party import is declared (see scripts/check_optional_imports.py)
+8. LICENSE.md licenses exactly this version, with a Change Date ~4 years out,
+   and NOTICE.md states the same date (written by scripts/set_version.py)
 
 Why check 3 is inverted
 -----------------------
@@ -36,6 +38,7 @@ import json
 import re
 import subprocess
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -184,6 +187,32 @@ def check_optional_imports() -> None:
     check(proc.returncode == 0, "every third-party import is declared", detail)
 
 
+def check_license(version: str) -> None:
+    """
+    The release that ships is governed by the LICENSE.md it ships with, forever.
+    v1.0.1–v1.0.32 went out with a Change Date that had already arrived and are
+    Apache 2.0 because of it. set_version.py writes today + 4 years; this refuses
+    to tag if that did not happen (script not run, run on the wrong version, or
+    run long enough ago that the release would get noticeably less than 4 years).
+    """
+    license_text = (ROOT / "LICENSE.md").read_text(encoding="utf-8")
+    notice_text = (ROOT / "NOTICE.md").read_text(encoding="utf-8")
+    work = re.search(r"^Licensed Work:\s+(.+?)\s*$", license_text, re.M)
+    change = re.search(r"^Change Date:\s+(\d{4}-\d{2}-\d{2})\s*$", license_text, re.M)
+    work_ok = bool(work) and work.group(1) == f"LocalLens MCP Agent v{version}"
+    check(work_ok, f"LICENSE.md licenses exactly v{version}",
+          f"Licensed Work is {work.group(1) if work else 'missing'!r} — run scripts/set_version.py")
+    if not check(bool(change), "LICENSE.md has a Change Date", "no 'Change Date: YYYY-MM-DD' line"):
+        return
+    change_date = date.fromisoformat(change.group(1))
+    floor = date.today() + timedelta(days=4 * 365 - 30)
+    check(change_date >= floor, f"Change Date {change_date} is ~4 years out",
+          f"must be on or after {floor}; a nearer date shortens this release's BSL term "
+          "for good — rerun scripts/set_version.py")
+    check(f"On {change_date}," in notice_text, "NOTICE.md states the same Change Date",
+          "NOTICE.md's 'On <date>, this version automatically becomes…' line disagrees")
+
+
 def check_tag_free(version: str) -> None:
     tag = f"v{version}"
     local = git("tag", "--list", tag)
@@ -212,6 +241,7 @@ def main() -> int:
     check_release_notes(version)
     check_tests()
     check_optional_imports()
+    check_license(version)
     check_tag_free(version)
 
     print()

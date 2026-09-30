@@ -12,6 +12,10 @@ Actions performed:
   2. Updates MCP_VERSION in src/mcp_server/updater.py
   3. Prepends to mcp.changelog in version.json (Application GUI Release Log)
   4. Generates release_notes/release_notes_v<VERSION>.md (GitHub Release Page Release Notes)
+  0. FIRST, before anything else: rewrites LICENSE.md and NOTICE.md so this
+     release is licensed as exactly this version with a Change Date four years
+     from today (see bump_license below). Aborts, having written nothing, if
+     either file does not match the expected shape.
 
 Deliberately NOT updated: mcp.latest in version.json. That field is what every
 installed client polls, so publishing it before the release assets exist leaves
@@ -24,7 +28,7 @@ import json
 import os
 import re
 import sys
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 # Highlights may be written "Fixed: …", "Added: …", "Improved: …", "Changed: …".
@@ -76,6 +80,53 @@ def build_release_sections(version, highlights):
     return sections + "\n---"
 
 
+# ---------------------------------------------------------------------------
+#  Licence Change Date — every release gets its own four years
+# ---------------------------------------------------------------------------
+# BSL 1.1 converts a version to Apache 2.0 on its Change Date or the fourth
+# anniversary of its release, whichever comes FIRST. v1.0.1–v1.0.32 shipped with
+# a Change Date of 2026-07-18 — someone typed that day's date, reading the field
+# as "effective from" — so each converted within weeks of release, irrevocably.
+# A fixed far-off date (2030-08-08) stopped the bleeding but gives each later
+# release less than four years. So every release writes its own: today + 4 years.
+# Each version is governed by the LICENSE.md it shipped with, so this never
+# touches an earlier release.
+
+_LICENSED_WORK_RE = re.compile(r"^(Licensed Work:\s+)LocalLens MCP Agent v\S+(?: and later)?[ \t]*$", re.M)
+_CHANGE_DATE_RE = re.compile(r"^(Change Date:\s+)\d{4}-\d{2}-\d{2}[ \t]*$", re.M)
+_NOTICE_DATE_RE = re.compile(r"^On \d{4}-\d{2}-\d{2}(, this version automatically becomes Apache 2\.0)", re.M)
+
+
+def four_years_after(day: date) -> date:
+    """Same calendar day four years on. 29 Feb lands on 28 Feb if that year has none."""
+    try:
+        return day.replace(year=day.year + 4)
+    except ValueError:
+        return day.replace(year=day.year + 4, day=28)
+
+
+def bump_license(license_text: str, notice_text: str, version: str, today: date) -> tuple[str, str, str]:
+    """
+    Return (license_text, notice_text, change_date) rewritten for this release.
+
+    Raises ValueError unless every line matches exactly once. A silent miss here
+    would ship a release under the previous Change Date, which is the one mistake
+    in this project that cannot be undone after the fact.
+    """
+    change_date = four_years_after(today).isoformat()
+    subs = [
+        ("LICENSE.md 'Licensed Work:'", _LICENSED_WORK_RE, rf"\g<1>LocalLens MCP Agent v{version}", "license"),
+        ("LICENSE.md 'Change Date:'", _CHANGE_DATE_RE, rf"\g<1>{change_date}", "license"),
+        ("NOTICE.md 'On <date>, this version…'", _NOTICE_DATE_RE, rf"On {change_date}\g<1>", "notice"),
+    ]
+    texts = {"license": license_text, "notice": notice_text}
+    for label, pattern, replacement, key in subs:
+        texts[key], count = pattern.subn(replacement, texts[key])
+        if count != 1:
+            raise ValueError(f"{label} line matched {count} times, expected exactly 1")
+    return texts["license"], texts["notice"], change_date
+
+
 def main():
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -102,6 +153,23 @@ def main():
     month_year = datetime.now().strftime("%B %Y")
 
     print(f"\n🚀 Preparing Release v{version} ({month_year})\n")
+
+    # 0. Licence first: if it cannot be rewritten, stop before touching anything.
+    license_path, notice_path = root_dir / "LICENSE.md", root_dir / "NOTICE.md"
+    try:
+        new_license, new_notice, change_date = bump_license(
+            license_path.read_text(encoding="utf-8"),
+            notice_path.read_text(encoding="utf-8"),
+            version,
+            date.today(),
+        )
+    except (OSError, ValueError) as e:
+        print(f" ❌ Could not set the licence Change Date: {e}", file=sys.stderr)
+        print("    Nothing was written. Fix LICENSE.md / NOTICE.md and rerun.", file=sys.stderr)
+        sys.exit(1)
+    license_path.write_text(new_license, encoding="utf-8")
+    notice_path.write_text(new_notice, encoding="utf-8")
+    print(f" ✅ Updated LICENSE.md + NOTICE.md -> v{version}, Change Date {change_date}")
 
     # 1. Update pyproject.toml
     pyproject_path = root_dir / "pyproject.toml"

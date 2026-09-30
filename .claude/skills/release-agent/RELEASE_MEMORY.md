@@ -182,3 +182,21 @@ part of a release. See "Trace before you change" in `CLAUDE.md`.
 Claude Desktop runs a **built copy** of this code, not `src/`. Source edits need
 a rebuild (`pyinstaller locallens-mcp.spec` / `bash build_tray_mac.sh`) and a
 Claude Desktop restart before they are observable in a real conversation.
+
+## Licence Change Date — every release gets its own four years
+
+BSL 1.1 converts a version to Apache 2.0 on its Change Date **or** the fourth
+anniversary of its release, *whichever comes first*. v1.0.1–v1.0.32 shipped with
+`Change Date: 2026-07-18`, set in a commit made that same day: the field was read
+as "effective from". All of them converted within weeks, irrevocably. v1.0.0
+(2029-06-01) and v1.0.33+ (2030-08-08) are unaffected.
+
+Since 2026-10-01 `scripts/set_version.py` (and `set_version.js`, in lockstep)
+writes `Licensed Work: LocalLens MCP Agent v<version>` and `Change Date: <today +
+4 years>` into `LICENSE.md`, plus the same date into `NOTICE.md`. The step runs
+first and aborts before writing anything if a line doesn't match (pinned by
+`tests/test_license_bump.py`). `preflight_release.py` refuses the tag unless
+the licence names this version and the date is at least 4 years minus 30 days
+out. The website reads both values from the tagged `LICENSE.md`
+(`locallensmcp/src/lib/latestVersion.ts`), so there is nothing to bump there.
+

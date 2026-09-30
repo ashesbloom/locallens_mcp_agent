@@ -62,6 +62,13 @@ python scripts/set_version.py <version> \
 Updates `pyproject.toml`, `updater.py` `MCP_VERSION`, the `version.json`
 changelog, and writes `release_notes/release_notes_v<version>.md`.
 
+It also rewrites `LICENSE.md` (Licensed Work = this exact version, Change Date =
+today + 4 years) and the matching date in `NOTICE.md`. **That diff is expected
+on every release — never revert it.** Each release is governed forever by the
+licence it ships with; see "Licence Change Date" in `RELEASE_MEMORY.md`. Run
+`set_version.py` on or near release day: the preflight rejects a Change Date
+more than ~30 days short of four years.
+
 It deliberately does **not** touch `version.json` `mcp.latest`. Leave it alone.
 
 ### 4. Read the generated notes and fill the gaps
@@ -84,8 +91,8 @@ python scripts/preflight_release.py <version>
 
 Must exit 0. It checks junk files, version agreement across all four files, that
 `mcp.latest` is still the *previous* version, that the notes are fully
-substituted and carry no dead-domain links, that tests pass, and that the tag is
-unused.
+substituted and carry no dead-domain links, that tests pass, that `LICENSE.md` licenses exactly this version with a
+Change Date ~4 years out (and `NOTICE.md` agrees), and that the tag is unused.
 
 For the judgement a script cannot make — secrets, a hardcoded price, prose that
 regressed against `docs/TESTING.md` — dispatch the `release-preflight` subagent

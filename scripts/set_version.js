@@ -19,6 +19,9 @@ Actions performed:
   2. Updates MCP_VERSION in src/mcp_server/updater.py
   3. Prepends to mcp.changelog in version.json (Application GUI Release Log)
   4. Generates release_notes_v<VERSION>.md (GitHub Release Page Release Notes)
+  0. FIRST: rewrites LICENSE.md + NOTICE.md so this release is licensed as exactly
+     this version with a Change Date four years from today. Aborts, having written
+     nothing, if either file does not match the expected shape.
 
 Deliberately NOT updated: mcp.latest in version.json. That field is what every
 installed client polls, so publishing it before the release assets exist leaves
@@ -82,6 +85,41 @@ const rootDir = path.join(__dirname, '..');
 const monthYear = new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
 
 console.log(`\n🚀 Preparing Release v${version} (${monthYear})\n`);
+
+// 0. Licence Change Date — every release gets its own four years. Why this exists
+// (v1.0.1–v1.0.32 converted to Apache 2.0 within weeks): see bump_license() in
+// scripts/set_version.py. Keep in lockstep with it.
+{
+  const pad = n => String(n).padStart(2, '0');
+  const now = new Date();
+  const y = now.getFullYear() + 4, m = now.getMonth();
+  let d = now.getDate();
+  if (m === 1 && d === 29 && new Date(y, 1, 29).getMonth() !== 1) d = 28; // no 29 Feb that year
+  const changeDate = `${y}-${pad(m + 1)}-${pad(d)}`;
+
+  const licensePath = path.join(rootDir, 'LICENSE.md');
+  const noticePath = path.join(rootDir, 'NOTICE.md');
+  const subs = [
+    ["LICENSE.md 'Licensed Work:'", 'license', /^(Licensed Work:\s+)LocalLens MCP Agent v\S+(?: and later)?[ \t]*$/gm, `$1LocalLens MCP Agent v${version}`],
+    ["LICENSE.md 'Change Date:'", 'license', /^(Change Date:\s+)\d{4}-\d{2}-\d{2}[ \t]*$/gm, `$1${changeDate}`],
+    ["NOTICE.md 'On <date>, this version…'", 'notice', /^On \d{4}-\d{2}-\d{2}(, this version automatically becomes Apache 2\.0)/gm, `On ${changeDate}$1`],
+  ];
+  try {
+    const texts = { license: fs.readFileSync(licensePath, 'utf8'), notice: fs.readFileSync(noticePath, 'utf8') };
+    for (const [label, key, re, replacement] of subs) {
+      const count = (texts[key].match(re) || []).length;
+      if (count !== 1) throw new Error(`${label} line matched ${count} times, expected exactly 1`);
+      texts[key] = texts[key].replace(re, replacement);
+    }
+    fs.writeFileSync(licensePath, texts.license, 'utf8');
+    fs.writeFileSync(noticePath, texts.notice, 'utf8');
+    console.log(` ✅ Updated LICENSE.md + NOTICE.md -> v${version}, Change Date ${changeDate}`);
+  } catch (e) {
+    console.error(` ❌ Could not set the licence Change Date: ${e.message}`);
+    console.error('    Nothing was written. Fix LICENSE.md / NOTICE.md and rerun.');
+    process.exit(1);
+  }
+}
 
 // 1. Update pyproject.toml
 const pyprojectPath = path.join(rootDir, 'pyproject.toml');
