@@ -192,7 +192,7 @@ as "effective from". All of them converted within weeks, irrevocably. v1.0.0
 (2029-06-01) and v1.0.33+ (2030-08-08) are unaffected.
 
 Since 2026-10-01 `scripts/set_version.py` (and `set_version.js`, in lockstep)
-writes `Licensed Work: LocalLens MCP Agent v<version>` and `Change Date: <today +
+writes `Licensed Work: LL Agent v<version>` (renamed from "LocalLens MCP Agent" in v1.5.0; the regex accepts both) and `Change Date: <today +
 4 years>` into `LICENSE.md`, plus the same date into `NOTICE.md`. The step runs
 first and aborts before writing anything if a line doesn't match (pinned by
 `tests/test_license_bump.py`). `preflight_release.py` refuses the tag unless
@@ -200,3 +200,22 @@ the licence names this version and the date is at least 4 years minus 30 days
 out. The website reads both values from the tagged `LICENSE.md`
 (`locallensmcp/src/lib/latestVersion.ts`), so there is nothing to bump there.
 
+
+## Ending the free preview has three license states, not two (v1.5.0)
+
+The paid flip (`FREE_PREVIEW = False` + `_PREVIEW_CUTOFF`) left a free-preview user
+with no key in a state nothing reported: `pro_features_unlocked()` let every Pro
+tool run, but `get_license_info()` only knew "key" or "Free", so
+`get_license_status` said "Pro features are locked", `locallens_help(topic="pro")`
+pitched Pro, and the tray offered Activate Pro… — to the exact users promised Pro
+for free. Caught by the `release-preflight` subagent, not by a test or the
+script. `get_license_info()` now returns `preview_user: True` for that case, and
+`status.py` and both trays branch on it (`tests/test_free_preview.py`). Any future
+change to who gets Pro must be checked against what each surface *says*, not only
+against what the gate *does*.
+
+## Tests must not read the current LICENSE.md line verbatim
+
+`set_version.py` rewrites the Licensed Work line on every release, so a test that
+`.replace()`s one exact version string silently no-ops after the next bump and
+fails during the release itself (v1.5.0). Match the line with a regex.
