@@ -396,11 +396,26 @@ def register_pro_tools(mcp: FastMCP):
         return get_license_info()
 
     @mcp.tool()
-    async def revoke_pro_license() -> Dict[str, Any]:
+    async def revoke_pro_license(confirm: bool = False) -> Dict[str, Any]:
         """
-        Revoke/Deactivate the current Pro license.
-        This immediately reverts the application to the Free tier and removes local license data.
+        Revoke/Deactivate the current Pro license on this machine: frees its seat
+        (one of the key's 3), locks Pro features, and removes local license data.
+
+        Two steps, always. Call first WITHOUT confirm — nothing changes; relay the
+        returned `what_happens` to the user and ask them to confirm. Call again with
+        confirm=True ONLY after the user replies yes to that question. A request to
+        deactivate is not itself the confirmation.
         """
+        if not confirm:
+            return {
+                "status": "confirmation_required",
+                "deactivated": False,
+                "what_happens": (
+                    "Deactivating frees this computer's seat on the license key, locks "
+                    "the Pro features here, and needs the full license key to turn Pro "
+                    "back on. The user has not confirmed yet."
+                ),
+            }
         return await deactivate_license()
 
     # ======================================================================

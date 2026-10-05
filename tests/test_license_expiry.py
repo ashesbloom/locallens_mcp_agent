@@ -240,6 +240,40 @@ def test_offline_deactivation_still_reverts_to_free(tmp_path):
     assert result["seat_freed"] is False and "seat_note" in result
 
 
+def _revoke_tool_app():
+    # Built before _Dodo.patch(): the mcp package evaluates `httpx.AsyncClient | None`
+    # at import time, which fails once AsyncClient is swapped for a lambda.
+    from mcp.server.fastmcp import FastMCP
+    from mcp_server.tools.pro_tools import register_pro_tools
+
+    app = FastMCP("t")
+    register_pro_tools(app)
+    return app
+
+
+def _call(app, args):
+    result = asyncio.run(app.call_tool("revoke_pro_license", args))
+    return (result[1] if isinstance(result, tuple) else result)["result"]
+
+
+def test_revoke_tool_asks_before_deactivating(tmp_path):
+    """One "deactivate my license" in chat used to free the seat and lock Pro at once."""
+    app, dodo = _revoke_tool_app(), _Dodo({"/deactivate": (200, {})})
+    with _cache(tmp_path), dodo.patch():
+        result = _call(app, {})
+        assert lic._read_cache() is not None, "deactivated without the user confirming"
+    assert dodo.requests == []
+    assert result["status"] == "confirmation_required"
+
+
+def test_revoke_tool_deactivates_once_confirmed(tmp_path):
+    app, dodo = _revoke_tool_app(), _Dodo({"/deactivate": (200, {})})
+    with _cache(tmp_path), dodo.patch():
+        result = _call(app, {"confirm": True})
+        assert lic._read_cache() is None
+    assert result["status"] == "deactivated" and result["seat_freed"] is True
+
+
 # ── Parsing ─────────────────────────────────────────────────────────────────
 
 def test_timestamps_parse_z_suffix():

@@ -53,6 +53,41 @@ def test_read_clipboard_windows_uses_powershell(monkeypatch):
     assert fake.calls[0][0][0] == "powershell"
 
 
+def test_license_snapshot_follows_the_cache_file(monkeypatch, tmp_path):
+    """Pro deactivated from Claude still read "Pro — Active" in the tray until a restart."""
+    import json
+    from mcp_server import license as lic
+
+    path = tmp_path / "mcp_license.json"
+    monkeypatch.setattr(lic, "_license_path", lambda: path)
+    path.write_text(json.dumps({
+        "license_key": "K", "activated_at": "2026-10-05T00:00:00", "tier": "pro",
+        "machine_id": lic._get_machine_id(), "kind": "subscription",
+        "validated_at": "2099-01-01T00:00:00+00:00", "instance_id": "lki_x",
+    }), encoding="utf-8")
+    assert actions.license_snapshot()["license_activated"] is True
+    path.unlink()  # what deactivate_license() does from the MCP process
+    assert actions.license_snapshot()["license_activated"] is False
+
+
+def test_deactivate_pro_reverts_to_free_and_never_raises(monkeypatch):
+    from mcp_server import license as lic
+
+    async def fake():
+        return {"status": "deactivated", "seat_freed": True}
+
+    monkeypatch.setattr(lic, "deactivate_license", fake)
+    done = actions.deactivate_pro()
+    assert done["status"] == "deactivated" and "Free" in done["summary"]
+
+    async def boom():
+        raise RuntimeError("disk")
+
+    monkeypatch.setattr(lic, "deactivate_license", boom)
+    failed = actions.deactivate_pro()
+    assert failed["status"] == "error" and failed["summary"]
+
+
 def test_read_clipboard_never_raises(monkeypatch):
     monkeypatch.setattr(actions.sys, "platform", "darwin")
     monkeypatch.setattr(actions.subprocess, "run", _Run(raises=OSError("no pbpaste")))

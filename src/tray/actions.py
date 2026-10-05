@@ -103,9 +103,6 @@ def get_current_app_info() -> dict:
     Safe to call from the background poll thread. Never raises.
     """
     mcp_version = "—"
-    license_tier = "Free"
-    license_activated = False
-    license_activated_at = None
     app_version = None
 
     if _updater_available:
@@ -116,27 +113,54 @@ def get_current_app_info() -> dict:
             pass
 
     try:
-        from mcp_server.license import get_license_info
-        li = get_license_info()
-        license_activated = bool(li.get("activated", False))
-        license_tier = li.get("tier", "free").capitalize()
-        license_activated_at = li.get("activated_at")
-    except Exception:
-        pass
-
-    try:
         from .status import get_installed_app_version
         app_version = get_installed_app_version()
     except Exception:
         pass
 
-    return {
-        "mcp_version": mcp_version,
-        "license_tier": license_tier,
-        "license_activated": license_activated,
-        "license_activated_at": license_activated_at,
-        "app_version": app_version,
-    }
+    return {"mcp_version": mcp_version, **license_snapshot(), "app_version": app_version}
+
+
+def license_snapshot() -> dict:
+    """
+    The license fields of get_current_app_info(). A local file read, no network,
+    so the trays call it on their 3 s status poll: the MCP server (another process)
+    can activate or deactivate at any time, and an hourly refresh left the menu
+    saying "Pro — Active" after Claude had deactivated it.
+    """
+    try:
+        from mcp_server.license import get_license_info
+        li = get_license_info()
+        return {
+            "license_tier": li.get("tier", "free").capitalize(),
+            "license_activated": bool(li.get("activated", False)),
+            "license_activated_at": li.get("activated_at"),
+        }
+    except Exception:
+        return {"license_tier": "Free", "license_activated": False, "license_activated_at": None}
+
+
+def deactivate_pro() -> dict:
+    """
+    The tray's Deactivate: the same deactivate_license() Claude's tool runs, so the
+    seat is freed on Dodo too. Blocks for up to ~10 s (one HTTP call), so callers
+    run it off the UI thread. Never raises.
+    """
+    import asyncio
+    try:
+        from mcp_server.license import deactivate_license
+        result = asyncio.run(deactivate_license())
+    except Exception as e:
+        return {"status": "error", "message": str(e),
+                "summary": f"Pro could not be deactivated: {e}"}
+    if result.get("status") == "deactivated":
+        summary = ("Pro is deactivated on this computer. You're on the Free plan; "
+                   "activate your key again any time to turn Pro back on.")
+        if result.get("seat_note"):
+            summary += "\n\n" + result["seat_note"]
+    else:
+        summary = "Pro wasn't active on this computer, so there was nothing to deactivate."
+    return {**result, "summary": summary}
 
 
 def get_pricing_url() -> str:

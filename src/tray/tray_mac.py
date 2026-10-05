@@ -11,7 +11,7 @@ from .actions import (
     get_claude_connection_state, maybe_show_welcome, show_help_tips,
     check_updates_now, open_url, copy_to_clipboard,
     get_current_app_info, install_mcp_update, format_download_progress,
-    get_pricing_url, FREE_PREVIEW,
+    get_pricing_url, FREE_PREVIEW, license_snapshot, deactivate_pro,
     CLAUDE_CUSTOM_INSTRUCTIONS, CLAUDE_INSTRUCTIONS_HOWTO,
     STATUS_OFF, STATUS_STARTING, STATUS_ON, STATUS_EXTERNAL, STATUS_ALERT,
 )
@@ -67,8 +67,11 @@ def _any_pid_alive(pids: list) -> bool:
 
 def _poll_status():
     global _cached_claude_connected, _cached_claude_binary_valid
-    global _cached_ll_running, _cached_app_running, _managed_ll_pids
+    global _cached_ll_running, _cached_app_running, _managed_ll_pids, _cached_app_info
     while not _stop_polling:
+        # The MCP server (Claude) activates and deactivates from another process;
+        # re-read the license here, not just in the hourly update loop.
+        _cached_app_info = {**_cached_app_info, **license_snapshot()}
         claude_state = get_claude_connection_state()
         _cached_claude_connected = claude_state["connected"]
         _cached_claude_binary_valid = claude_state["binary_valid"]
@@ -399,6 +402,21 @@ class LocalLensAgentApp(rumps.App):
 
         threading.Thread(target=_check_bg, daemon=True).start()
 
+    def _confirm_deactivate(self):
+        """Deactivate from the tray, after an explicit yes (Claude's tool asks too)."""
+        if rumps.alert(
+            "Deactivate Pro on this Mac?",
+            "This frees this Mac's seat on your license key and locks the Pro "
+            "features here. You can activate the same key again any time.",
+            ok="Keep Pro", other="Deactivate",  # Return keeps Pro
+        ) != -1:
+            return
+
+        def _run():
+            # Off the main thread: freeing the seat is an HTTP call (up to ~10 s).
+            _pending_alerts.append(("License & Plans", deactivate_pro()["summary"]))
+        threading.Thread(target=_run, daemon=True).start()
+
     def on_plan(self, sender):
         """
         License & Plans. The assistant used to tell people to "check Settings →
@@ -412,7 +430,7 @@ class LocalLensAgentApp(rumps.App):
 
         if info.get("license_activated"):
             activated = info.get("license_activated_at") or "unknown"
-            rumps.alert(
+            res = rumps.alert(
                 "License & Plans",
                 f"Plan: {tier}  ⭐\n"
                 f"Activated: {str(activated)[:10]}\n\n"
@@ -421,7 +439,10 @@ class LocalLensAgentApp(rumps.App):
                 "active folders.\n\n"
                 "This licence is tied to this machine.",
                 ok="OK",
+                other="Deactivate on this Mac…",  # no Return/Esc shortcut lands here
             )
+            if res == -1:
+                self._confirm_deactivate()
             return
 
         # Free preview: nothing is gated, so this must not read as an upsell.

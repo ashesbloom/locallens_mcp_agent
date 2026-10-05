@@ -30,7 +30,7 @@ from .actions import (
     get_claude_connection_state, maybe_show_welcome, show_help_tips,
     check_updates_now, open_url, copy_to_clipboard,
     get_current_app_info, install_mcp_update, format_download_progress,
-    get_pricing_url, FREE_PREVIEW,
+    get_pricing_url, FREE_PREVIEW, license_snapshot, deactivate_pro,
     CLAUDE_CUSTOM_INSTRUCTIONS, CLAUDE_INSTRUCTIONS_HOWTO,
     STATUS_OFF, STATUS_STARTING, STATUS_ON, STATUS_EXTERNAL, STATUS_ALERT,
 )
@@ -79,6 +79,7 @@ MB_ICONINFO = 0x40
 MB_ICONQUESTION = 0x20
 MB_ICONWARNING = 0x30
 IDYES = 6
+MB_DEFBUTTON2 = 0x100
 
 
 def _msg_box(title: str, message: str, flags: int = MB_OK | MB_ICONINFO) -> int:
@@ -112,8 +113,12 @@ def _poll_status():
     """Poll backend / Claude connection status every 3 seconds."""
     global _cached_claude_connected, _cached_claude_binary_valid
     global _cached_ll_running, _cached_app_running, _managed_ll_pids
-    global _cached_dark_taskbar
+    global _cached_dark_taskbar, _cached_app_info
     while not _stop_event.is_set():
+        # The MCP server (Claude) activates and deactivates from another process;
+        # re-read the license here, not just in the hourly update loop.
+        _cached_app_info = {**_cached_app_info, **license_snapshot()}
+
         # Repaint the "LL" icon if the user flipped light/dark since last tick
         dark = _taskbar_is_dark()
         if dark != _cached_dark_taskbar:
@@ -583,15 +588,25 @@ def on_plan(icon, item):
 
     if info.get("license_activated"):
         activated = info.get("license_activated_at") or "unknown"
-        _msg_box(
+        # Yes/No with No as the default button, so Enter never deactivates.
+        if _msg_box(
             "License & Plans",
             f"Plan: {tier}\n"
             f"Activated: {str(activated)[:10]}\n\n"
             "Everything is unlocked: batch face enrolment, duplicate detection "
             "and cleanup, export reports, scheduled sweeps and "
             "active folders.\n\n"
-            "This licence is tied to this machine.",
-        )
+            "This licence is tied to this machine.\n\n"
+            "Deactivate Pro on this computer? That frees its seat on your license "
+            "key and locks the Pro features here. You can activate the same key "
+            "again any time.",
+            MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2,
+        ) == IDYES:
+            # Off the menu thread: freeing the seat is an HTTP call (up to ~10 s).
+            threading.Thread(
+                target=lambda: _msg_box("License & Plans", deactivate_pro()["summary"]),
+                daemon=True,
+            ).start()
         return
 
     # Free preview: nothing is gated, so this must not read as an upsell. The
