@@ -78,7 +78,7 @@ On Windows that is `.\locallens-mcp.exe --setup-claude`. Restart Claude Desktop 
 
 ## ⬆️ Already have LL Agent?
 
-Open the **LocalLens tray menu → Check for Updates → Install Update**. It downloads, verifies the checksum and installs for you.
+Open the **LL menu (the system tray on Windows) → Check for Updates → Install Update**. It downloads, verifies the checksum and installs for you.
 
 Homebrew users can instead run:
 
