@@ -23,4 +23,4 @@ Not licensed:
 
 Get a license key: https://locallensmcp.vercel.app/pricing
 
-On 2030-08-08, this version automatically becomes Apache 2.0 (fully open source).
+On 2030-10-05, this version automatically becomes Apache 2.0 (fully open source).

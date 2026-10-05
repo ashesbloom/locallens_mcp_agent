@@ -15,6 +15,21 @@
     },
     "changelog": [
       {
+        "version": "1.5.0",
+        "date": "October 2026",
+        "highlights": [
+          "Paid plans are live. LL Agent Pro is a yearly or monthly plan, and if you used LL Agent during the free preview you keep Pro free, permanently, with no key.",
+          "Activate Pro… in the LL menu (the system tray on Windows) opens a small window where you paste your license key.",
+          "License & Plans in the LL menu can deactivate Pro on this computer, after you confirm.",
+          "Claude now asks you to confirm before it deactivates your license.",
+          "License keys now come from Dodo Payments. A subscription re-checks about once a week, sending only the key, and keeps working for 14 days offline; a founding key never re-checks.",
+          "On recent macOS, an activated license was forgotten every time LL Agent restarted.",
+          "The LL menu now shows Pro turning on or off within seconds when you activate or deactivate through Claude, instead of after a restart.",
+          "Free-preview users updating from a version older than 1.0.34 are recognised as early users and keep Pro.",
+          "The product is now called LL Agent. Its license (Business Source License 1.1) says plainly that the Free tools are yours to use and Pro needs a key, and the Windows installer shows it."
+        ]
+      },
+      {
         "version": "1.1.2",
         "date": "August 2026",
         "highlights": [

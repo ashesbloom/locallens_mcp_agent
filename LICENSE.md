@@ -1,7 +1,7 @@
 # Business Source License 1.1
 
 Licensor:             Mayank Pandey
-Licensed Work:        LL Agent v1.0.34 and later
+Licensed Work:        LL Agent v1.5.0
                       The Licensed Work is (c) 2026 Mayank Pandey
 
 Additional Use Grant: You may use the Licensed Work for non-production purposes,
@@ -20,7 +20,7 @@ Additional Use Grant: You may use the Licensed Work for non-production purposes,
                       of the Licensed Work whose license-key check has been removed,
                       disabled or circumvented.
 
-Change Date:          2030-08-08
+Change Date:          2030-10-05
 
 Change License:       Apache License, Version 2.0
 
