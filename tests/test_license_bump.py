@@ -10,6 +10,7 @@ Run with:
     python -m pytest tests/test_license_bump.py -v
 """
 
+import re
 import sys
 from datetime import date
 from pathlib import Path
@@ -56,8 +57,9 @@ def test_bump_is_repeatable():
 def test_bump_renames_a_licence_still_under_the_old_product_name():
     # Every LICENSE.md released before v1.1.3 says "LocalLens MCP Agent"; the
     # product is LL Agent now, and the next bump must carry the new name.
-    old = LICENSE.replace("Licensed Work:        LL Agent v1.0.34 and later",
-                          "Licensed Work:        LocalLens MCP Agent v1.0.34 and later")
+    # Rewrite whatever the line says today: every release's bump changes it, so
+    # matching one exact version broke this test at the v1.5.0 bump.
+    old = re.sub(r"(?m)^(Licensed Work:\s+).*$", r"\1LocalLens MCP Agent v1.0.34 and later", LICENSE)
     assert "LocalLens MCP Agent v1.0.34" in old
     lic, _, _ = bump_license(old, NOTICE, "1.2.0", date(2026, 10, 1))
     assert "Licensed Work:        LL Agent v1.2.0\n" in lic
