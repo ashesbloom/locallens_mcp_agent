@@ -87,6 +87,19 @@ def test_established_user_is_not_nagged(tmp_path):
         assert "tray menu" in msg.lower(), "the in-app route must remain"
 
 
+def test_new_user_with_a_timezone_aware_stamp_gets_the_suggestion(tmp_path):
+    # _stamp_onboarding_if_absent writes datetime.now(timezone.utc).isoformat();
+    # naive now() minus that raised TypeError, which read as "established" for
+    # every user onboarded by a current build.
+    from datetime import timezone
+    recent = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+    with _with_onboarded_at(tmp_path, recent):
+        assert lic.is_new_user() is True
+    old = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
+    with _with_onboarded_at(tmp_path, old):
+        assert lic.is_new_user() is False
+
+
 def test_never_missing_marker_counts_as_new(tmp_path):
     with _with_onboarded_at(tmp_path, None):
         assert lic.is_new_user() is True

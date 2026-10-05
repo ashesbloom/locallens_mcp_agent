@@ -25,6 +25,7 @@ Run: python -m pytest tests/test_free_preview.py -v
 """
 import asyncio
 import json
+import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -38,9 +39,7 @@ from mcp_server import license as lic
 def _expired_cache(tmp_path):
     """A cache holding a subscription that lapsed well past the offline grace."""
     path = tmp_path / "mcp_license.json"
-    expired = (datetime.now(timezone.utc) - timedelta(days=30)).strftime(
-        "%Y-%m-%dT%H:%M:%S.000000Z"
-    )
+    last_checked = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
     path.write_text(
         json.dumps(
             {
@@ -48,7 +47,8 @@ def _expired_cache(tmp_path):
                 "activated_at": datetime.now().isoformat(),
                 "machine_id": lic._get_machine_id(),
                 "tier": "pro",
-                "expires_at": expired,
+                "kind": "subscription",
+                "validated_at": last_checked,
             }
         ),
         encoding="utf-8",
@@ -218,6 +218,52 @@ def test_stamping_never_overwrites_an_existing_marker(tmp_path):
         lic._stamp_onboarding_if_absent()
         written = json.loads((tmp_path / "mcp_onboarded.json").read_text(encoding="utf-8"))
     assert written["onboarded_at"] == original
+
+
+def _age(path, when):
+    os.utime(path, (when.timestamp(), when.timestamp()))
+
+
+def test_missing_marker_is_backdated_to_the_oldest_local_file(tmp_path):
+    """
+    The founding-user bug. A preview user on a pre-v1.0.34 build has no marker; if
+    they first update after launch, stamping "now" classes them as post-launch and
+    takes away the Pro they were promised. The desktop app's old files still carry
+    the real install date, so that is what must be stamped.
+    """
+    july = datetime(2026, 7, 10, tzinfo=timezone.utc)
+    token = tmp_path / "local_api_token.txt"
+    token.write_text("x")
+    _age(token, july)
+    (tmp_path / "schedules.json").write_text("{}")  # touched recently: must not win
+
+    with _onboarded(tmp_path, None), \
+         mock.patch.object(lic, "FREE_PREVIEW", False), \
+         mock.patch.object(lic, "_PREVIEW_CUTOFF", _CUTOFF):
+        lic._stamp_onboarding_if_absent()
+        written = json.loads((tmp_path / "mcp_onboarded.json").read_text(encoding="utf-8"))
+        assert lic._parse_expiry(written["onboarded_at"]) <= july
+        assert written["source"] == "mcp_server_backdated"
+        assert lic.installed_before_cutoff() is True
+
+
+def test_port_file_is_not_evidence_of_an_old_install(tmp_path):
+    """port.txt is rewritten on every launch; it alone must not backdate anything."""
+    port = tmp_path / "port.txt"
+    port.write_text("8000")
+    _age(port, datetime(2025, 1, 1, tzinfo=timezone.utc))
+    assert lic._earliest_local_trace(tmp_path) is None
+
+
+def test_brand_new_install_is_stamped_now(tmp_path):
+    """No LocalLens dir at all means a genuinely new user: stamp today."""
+    missing = tmp_path / "LocalLens"
+    with mock.patch.object(lic, "_get_license_dir", return_value=missing):
+        lic._stamp_onboarding_if_absent()
+        written = json.loads((missing / "mcp_onboarded.json").read_text(encoding="utf-8"))
+    assert written["source"] == "mcp_server"
+    stamped = lic._parse_expiry(written["onboarded_at"])
+    assert datetime.now(timezone.utc) - stamped < timedelta(minutes=1)
 
 
 def test_free_user_is_not_sent_to_activate_a_license(tmp_path):
