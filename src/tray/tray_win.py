@@ -333,7 +333,11 @@ def _info_plan_title(_item=None):
 
 def _activate_title(_item=None):
     # The item /thanks names (copy.thanks.activateApp); flips once licensed.
-    return "★  Pro — Active" if _cached_app_info.get("license_activated") else "Activate Pro…"
+    if _cached_app_info.get("license_activated"):
+        return "★  Pro — Active"
+    if _cached_app_info.get("license_preview_user"):
+        return "★  Pro — Early user"
+    return "Activate Pro…"
 
 
 def _info_app_title(_item=None):
@@ -609,6 +613,18 @@ def on_plan(icon, item):
             ).start()
         return
 
+    # Early user after launch: Pro for good, no key — nothing to sell or deactivate.
+    if info.get("license_preview_user"):
+        _msg_box(
+            "License & Plans",
+            "Plan: Pro (early user)\n\n"
+            "You used LL Agent during the free preview, so Pro is yours free, "
+        "permanently. No license key needed.\n\n"
+        "Everything is unlocked: batch face enrolment, duplicate detection "
+        "and cleanup, export reports, scheduled sweeps and active folders.",
+        )
+        return
+
     # Free preview: nothing is gated, so this must not read as an upsell. The
     # grandfathering line is the point — it is a real commitment (docs/PRICING.md)
     # and the tray is where an existing user looks for it. Mirrors tray_mac.py.
@@ -643,7 +659,7 @@ def on_plan(icon, item):
 
 
 def on_activate(icon, item):
-    if _cached_app_info.get("license_activated"):
+    if _cached_app_info.get("license_activated") or _cached_app_info.get("license_preview_user"):
         on_plan(icon, item)
         return
 

@@ -519,6 +519,19 @@ def get_license_info() -> Dict[str, Any]:
                 "Pro feature is unlocked for everyone. Paid plans arrive later."
             ),
         }
+    if installed_before_cutoff():
+        # The third state: no key, yet Pro runs (pro_features_unlocked). Without it
+        # every reader of this dict — get_license_status, locallens_help, the tray —
+        # told a free-preview user they were on Free and pitched them Pro.
+        return {
+            "activated": False,
+            "tier": "pro",
+            "preview_user": True,
+            "message": (
+                "Pro is unlocked free, permanently: this install dates from the free "
+                "preview, before paid plans launched. No license key is needed."
+            ),
+        }
     return {
         "activated": False,
         "tier": "free",

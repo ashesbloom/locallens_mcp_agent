@@ -276,5 +276,52 @@ def test_free_user_is_not_sent_to_activate_a_license(tmp_path):
     with _no_cache(tmp_path), mock.patch.object(lic, "FREE_PREVIEW", True):
         assert "activate_pro_license" not in lic.get_license_info()["message"]
 
-    with _no_cache(tmp_path), mock.patch.object(lic, "FREE_PREVIEW", False):
+    # After launch, for someone who arrived after it (a preview user is told they
+    # keep Pro instead). The install date is pinned so the developer's own
+    # ~/.config/LocalLens marker can't decide the outcome.
+    with _onboarded(tmp_path, "2027-03-01T12:00:00"), \
+         mock.patch.object(lic, "FREE_PREVIEW", False), \
+         mock.patch.object(lic, "_PREVIEW_CUTOFF", _CUTOFF):
         assert "activate_pro_license" in lic.get_license_info()["message"]
+
+
+# ── What a preview user is TOLD after the preview ends ─────────────────────
+# v1.5.0 review: the tools ran (pro_features_unlocked), but get_license_status
+# said "Pro features are locked" and locallens_help(topic="pro") pitched Pro to
+# the very users who were promised it free.
+
+def _help_pro(tmp_path, stamp):
+    from mcp.server.fastmcp import FastMCP
+    from mcp_server.tools.status import register_status
+
+    app = FastMCP("t")
+    register_status(app)  # before patching: registration imports the mcp package
+    with _onboarded(tmp_path, stamp), \
+         mock.patch.object(lic, "FREE_PREVIEW", False), \
+         mock.patch("mcp_server.tools.status.FREE_PREVIEW", False), \
+         mock.patch.object(lic, "_PREVIEW_CUTOFF", _CUTOFF):
+        result = asyncio.run(app.call_tool("locallens_help", {"topic": "pro"}))
+    return (result[1] if isinstance(result, tuple) else result)["result"]
+
+
+def test_preview_user_is_told_they_have_pro(tmp_path):
+    before = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
+    with _onboarded(tmp_path, before), \
+         mock.patch.object(lic, "FREE_PREVIEW", False), \
+         mock.patch.object(lic, "_PREVIEW_CUTOFF", _CUTOFF):
+        info = lic.get_license_info()
+    assert info["preview_user"] is True
+    import re
+    assert not re.search(r"\blocked\b", info["message"].lower())  # "unlocked" is fine
+
+
+def test_preview_user_is_not_pitched_pro(tmp_path):
+    before = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
+    result = _help_pro(tmp_path, before)
+    assert "pro_showcase" not in result and "cta" not in result
+    assert "early user" in json.dumps(result).lower()
+
+
+def test_post_launch_user_still_sees_free_and_the_offer(tmp_path):
+    result = _help_pro(tmp_path, "2027-03-01T12:00:00")
+    assert "pro_showcase" in result and "Sort by People" in json.dumps(result)

@@ -131,13 +131,17 @@ def license_snapshot() -> dict:
     try:
         from mcp_server.license import get_license_info
         li = get_license_info()
+        preview_user = bool(li.get("preview_user"))
         return {
-            "license_tier": li.get("tier", "free").capitalize(),
+            "license_tier": "Pro (early user)" if preview_user else li.get("tier", "free").capitalize(),
             "license_activated": bool(li.get("activated", False)),
             "license_activated_at": li.get("activated_at"),
+            # No key, but Pro for good: installed during the free preview.
+            "license_preview_user": preview_user,
         }
     except Exception:
-        return {"license_tier": "Free", "license_activated": False, "license_activated_at": None}
+        return {"license_tier": "Free", "license_activated": False,
+                "license_activated_at": None, "license_preview_user": False}
 
 
 def deactivate_pro() -> dict:

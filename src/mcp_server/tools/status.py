@@ -444,6 +444,8 @@ def register_status(mcp: FastMCP):
         # ── Inject license status for contextual Pro messaging ──
         license_info = get_license_info()
         is_pro = license_info.get("activated", False)
+        # Installed during the free preview: no key, but Pro is theirs for good.
+        preview_user = bool(license_info.get("preview_user"))
 
         # `is_pro` answers "does this user hold a paid license" and drives what we
         # SAY about their license. `unlocked` answers "can they actually run Pro
@@ -451,10 +453,12 @@ def register_status(mcp: FastMCP):
         # those diverge: without this, every topic below took the Free branch and
         # pitched (`pro_pitch`, `pro_showcase`) features the user can already run —
         # the assistant selling something it is simultaneously giving away.
-        unlocked = is_pro or FREE_PREVIEW
+        unlocked = is_pro or FREE_PREVIEW or preview_user
         tier_label = (
             "pro ✅ (unlocked)" if is_pro
-            else "free preview — every Pro feature unlocked, no license needed"
+            else "pro ✅ — early user, free permanently, no license needed" if preview_user
+            else "free preview — every Pro feature unlocked, no license needed" if FREE_PREVIEW
+            else "free"
         )
 
         # ══════════════════════════════════════════════
@@ -478,6 +482,7 @@ def register_status(mcp: FastMCP):
                 ],
                 "license_status": (
                     "Pro ✅" if is_pro
+                    else "Pro ✅ — early user, free permanently" if preview_user
                     else "Free preview — every Pro feature unlocked, no license needed"
                     if FREE_PREVIEW
                     else "Free tier — Pro features available"
@@ -866,7 +871,11 @@ def register_status(mcp: FastMCP):
             # Identity of the licence in hand, so "am I Pro / since when" is answerable
             # here rather than requiring a second get_license_status call.
             result["your_license"] = {
-                "tier": "Pro" if is_pro else "Free",
+                "tier": (
+                    "Pro" if is_pro
+                    else "Pro (early user — free, permanently)" if preview_user
+                    else "Free"
+                ),
                 "activated_at": license_info.get("activated_at"),
                 "instance_id": license_info.get("instance_id"),
             }
@@ -899,7 +908,7 @@ def register_status(mcp: FastMCP):
             else:
                 result["pricing"] = {
                     "model": "Plans and current offers are listed on the pricing page.",
-                    "primary": "Tray menu → Plan (shows your tier and upgrade options in-app).",
+                    "primary": "LL menu → Activate Pro… (paste a license key in-app).",
                     "also_available_at": PRICING_URL,
                     "note": (
                         "Never state a price or a billing model — neither is defined here. "
@@ -952,7 +961,12 @@ def register_status(mcp: FastMCP):
                     "from free_during_preview. End with explore_next."
                 )
             elif unlocked:
-                result["status"] = "🎉 You have Pro — everything is unlocked!"
+                result["status"] = (
+                    "🎉 You have Pro, free and permanently: you used LL Agent during the "
+                    "free preview, so you're an early user and need no license key."
+                    if preview_user and not is_pro
+                    else "🎉 You have Pro — everything is unlocked!"
+                )
                 result["your_features"] = [
                     {"feature": "👤 Batch Enroll Faces", "try": "\"Add [name] to face recognition\""},
                     {"feature": "🗑️ Find Duplicates", "try": "\"Find duplicates in [folder]\""},

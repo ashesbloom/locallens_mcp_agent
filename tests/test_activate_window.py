@@ -70,6 +70,17 @@ def test_license_snapshot_follows_the_cache_file(monkeypatch, tmp_path):
     assert actions.license_snapshot()["license_activated"] is False
 
 
+def test_license_snapshot_marks_a_preview_user(monkeypatch):
+    """After launch an early user has no key but keeps Pro; the tray must say so."""
+    from mcp_server import license as lic
+
+    monkeypatch.setattr(lic, "get_license_info", lambda: {
+        "activated": False, "tier": "pro", "preview_user": True, "message": "…"})
+    snap = actions.license_snapshot()
+    assert snap["license_preview_user"] is True and snap["license_activated"] is False
+    assert "early user" in snap["license_tier"].lower()
+
+
 def test_deactivate_pro_reverts_to_free_and_never_raises(monkeypatch):
     from mcp_server import license as lic
 

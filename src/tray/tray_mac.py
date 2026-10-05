@@ -329,6 +329,9 @@ class LocalLensAgentApp(rumps.App):
         if info.get("license_activated"):
             self.btn_activate.title = "★  Pro — Active"
             self.btn_activate.set_callback(self.on_plan)
+        elif info.get("license_preview_user"):
+            self.btn_activate.title = "★  Pro — Early user"
+            self.btn_activate.set_callback(self.on_plan)
         else:
             self.btn_activate.title = "Activate Pro…"
             self.btn_activate.set_callback(self.on_activate)
@@ -443,6 +446,19 @@ class LocalLensAgentApp(rumps.App):
             )
             if res == -1:
                 self._confirm_deactivate()
+            return
+
+        # Early user after launch: Pro for good, no key — nothing to sell or deactivate.
+        if info.get("license_preview_user"):
+            rumps.alert(
+                "License & Plans",
+                "Plan: Pro (early user)  ⭐\n\n"
+                "You used LL Agent during the free preview, so Pro is yours free, "
+                "permanently. No license key needed.\n\n"
+                "Everything is unlocked: batch face enrolment, duplicate detection "
+                "and cleanup, export reports, scheduled sweeps and active folders.",
+                ok="OK",
+            )
             return
 
         # Free preview: nothing is gated, so this must not read as an upsell.
