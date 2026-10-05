@@ -17,10 +17,10 @@
 
 **Zero data leaves your machine. Not even metadata.**
 
-> 🎉 **Free preview:** every Pro feature below is unlocked for everyone right now — no
-> license, no signup. If you're using LL Agent during the preview, you keep all of it
-> free, permanently, once paid plans launch. Not a trial ending — a thank-you for being
-> here early. Details: [locallensmcp.vercel.app/#pricing](https://locallensmcp.vercel.app/#pricing).
+> 🎉 **Used LL Agent during the free preview?** You keep every Pro feature free,
+> permanently — no key, nothing to do. Not a trial ending — a thank-you for being here
+> early. New here? The Free tools are free forever; Pro is a yearly or monthly plan:
+> [locallensmcp.vercel.app/pricing](https://locallensmcp.vercel.app/pricing).
 
 ---
 
@@ -161,8 +161,8 @@ Restart Claude Desktop. LocalLens tools will appear in Claude's tool panel.
 
 ## Free vs Pro
 
-The tiers below are how tools are grouped long-term. **During the free preview, that
-grouping doesn't gate anything** — every tool on both lists runs for everyone right now.
+Free tools work for everyone. Pro tools need a license key — except for anyone who
+used LL Agent during the free preview, who keeps Pro free.
 
 ### Free Tools
 
@@ -189,8 +189,7 @@ Available to everyone, no license required:
 
 ### Pro Tools
 
-Normally require an active Pro license (`activate_pro_license`) — free for everyone
-during the preview, no license needed:
+Require an active Pro license (`activate_pro_license`), or a free-preview install:
 
 | Tool | What it does |
 |---|---|
@@ -223,10 +222,7 @@ during the preview, no license needed:
 
 ### Activating Pro
 
-Nothing to do right now — Pro tools already run with no key while the free preview is
-on. Just ask Claude to use them.
-
-Once paid plans launch, LL Agent Pro is a yearly or monthly subscription, sold through
+LL Agent Pro is a yearly or monthly subscription, sold through
 [Dodo Payments](https://dodopayments.com) as merchant of record (they handle payment and
 tax, and email your license key). There is no lifetime plan. To activate, either:
 
@@ -236,8 +232,8 @@ tax, and email your license key). There is no lifetime plan. To activate, either
 
 Activation needs the internet. A subscription then re-checks about once a week and keeps
 working for 14 days offline; a founding key never checks again. A key works on up to 3 of
-your machines. And if you're already using LL Agent today, you won't need a key at all —
-see the free preview note above.
+your machines. If you used LL Agent during the free preview, you don't need a key at
+all — Pro stays on for you.
 
 ---
 
@@ -264,8 +260,8 @@ if you are offline.
 LL Agent is source-available under the [Business Source License 1.1](LICENSE.md)
 (BUSL-1.1), © 2026 Mayank Pandey. You may read, fork and modify it, run it for testing,
 development and education, and use the Free-tier tools on your photos. Using Pro features
-on real photo libraries — personal or commercial — needs a license key, except during the
-free preview and for users who installed before paid plans launched. Using Pro in a copy
+on real photo libraries — personal or commercial — needs a license key, except for users who
+installed during the free preview, before paid plans launched. Using Pro in a copy
 whose license-key check was removed or bypassed is not licensed. Each version becomes Apache 2.0
 on its Change Date. Summary: [NOTICE.md](NOTICE.md). AI coding agents: see
 [AGENTS.md](AGENTS.md).

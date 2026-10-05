@@ -7,10 +7,9 @@ Premium tools gated behind the Pro license tier.
 Each tool is decorated with @require_pro, which checks the local license cache
 before execution. If not activated, the LLM receives a friendly upgrade prompt.
 
-FREE PREVIEW: `FREE_PREVIEW` in ../license.py is currently True, so @require_pro is
-a no-op and every tool here runs for everyone without a license. All ten Pro tool
-docstrings below say so; strip "(FREE right now — …)" from each when the preview
-ends. See ../../../docs/RESTORING_PAID_MODE.md.
+Paid since v1.5.0 (FREE_PREVIEW is False): @require_pro lets a tool run for a valid
+license key or for a free-preview user (installed before _PREVIEW_CUTOFF), who keeps
+Pro permanently. See ../license.py pro_features_unlocked().
 
 Current Pro Tools:
   - add_face_enroll       (enroll a new person for face recognition)
@@ -431,7 +430,7 @@ def register_pro_tools(mcp: FastMCP):
         timeout_s: int = _DEFAULT_WAIT_S
     ) -> Dict[str, Any]:
         """
-        ⚡ PRO FEATURE (FREE right now — LocalLens is in free preview, no license needed) — Enroll one or more people into the face recognition system in a single batch.
+        ⚡ PRO FEATURE — Enroll one or more people into the face recognition system in a single batch.
         Provide a dictionary mapping each person's name to the folder with their photos.
         The system scans each folder for images and enrolls them all in one operation.
 
@@ -527,7 +526,7 @@ def register_pro_tools(mcp: FastMCP):
         similarity_threshold: float = 0.95
     ) -> Dict[str, Any]:
         """
-        ⚡ PRO FEATURE (FREE right now — LocalLens is in free preview, no license needed) — Scan a folder for duplicate or near-duplicate photos.
+        ⚡ PRO FEATURE — Scan a folder for duplicate or near-duplicate photos.
         Uses perceptual hashing to detect visually similar images even if
         they have different filenames or resolutions.
 
@@ -633,7 +632,7 @@ def register_pro_tools(mcp: FastMCP):
         include_face_summary: bool = True
     ) -> Dict[str, Any]:
         """
-        ⚡ PRO FEATURE (FREE right now — LocalLens is in free preview, no license needed) — Generate and SAVE a detailed PDF/JSON report file about a photo folder.
+        ⚡ PRO FEATURE — Generate and SAVE a detailed PDF/JSON report file about a photo folder.
         This is for creating a SAVED DOCUMENT — not for quick folder analysis.
 
         ⚠️ NOT for pre-sort checks. If the user wants to "analyse my folder", "check what's inside",
@@ -687,7 +686,7 @@ def register_pro_tools(mcp: FastMCP):
         debounce_seconds: int = 5,
     ) -> Dict[str, Any]:
         """
-        ⚡ PRO FEATURE (FREE right now — LocalLens is in free preview, no license needed) — Create an Active Folder for real-time photo organization.
+        ⚡ PRO FEATURE — Create an Active Folder for real-time photo organization.
         
         INSTANTLY detects when new photos are added to the source folder and organizes them.
         It also runs a hidden daily safety-sweep to catch anything missed while the system was off.
@@ -765,7 +764,7 @@ def register_pro_tools(mcp: FastMCP):
         ignore_list: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
-        ⚡ PRO FEATURE (FREE right now — LocalLens is in free preview, no license needed) — Schedule smart, background photo organization sweeps.
+        ⚡ PRO FEATURE — Schedule smart, background photo organization sweeps.
         
         Runs a background sweep every N hours. Ideal for bulk folders, network drives, 
         or periodic organization without the overhead of real-time monitoring.
@@ -851,7 +850,7 @@ def register_pro_tools(mcp: FastMCP):
     @require_pro
     async def list_schedules() -> Dict[str, Any]:
         """
-        ⚡ PRO (FREE right now — LocalLens is in free preview, no license needed) — List all auto-organize schedules and the daemon's current state.
+        ⚡ PRO — List all auto-organize schedules and the daemon's current state.
 
         Returns:
           - daemon_running: whether the background daemon process is active
@@ -913,7 +912,7 @@ def register_pro_tools(mcp: FastMCP):
     @require_pro
     async def open_scheduler_dashboard() -> Dict[str, Any]:
         """
-        ⚡ PRO (FREE right now — LocalLens is in free preview, no license needed) — Open the Scheduler Dashboard in the user's web browser.
+        ⚡ PRO — Open the Scheduler Dashboard in the user's web browser.
         
         Call this when the user says "show me the scheduler dashboard", "open logs", 
         or "where is the scheduler UI?".
@@ -938,7 +937,7 @@ def register_pro_tools(mcp: FastMCP):
         action: str,
     ) -> Dict[str, Any]:
         """
-        ⚡ PRO (FREE right now — LocalLens is in free preview, no license needed) — Manage an existing auto-organize schedule or the daemon process.
+        ⚡ PRO — Manage an existing auto-organize schedule or the daemon process.
 
         - schedule_id: The ID of the schedule (e.g. "sched_abc123"), or "daemon" for daemon-only actions
         - action: One of:
@@ -1022,7 +1021,7 @@ def register_pro_tools(mcp: FastMCP):
         include_persona_context: bool = True,
     ) -> Dict[str, Any]:
         """
-        ⚡ PRO FEATURE (FREE right now — LocalLens is in free preview, no license needed) — Get personalized album suggestions based on your photo
+        ⚡ PRO FEATURE — Get personalized album suggestions based on your photo
         history and personal interests.
 
         This does NOT scan any folder on demand. It uses metadata automatically
@@ -1064,7 +1063,7 @@ def register_pro_tools(mcp: FastMCP):
         dry_run: bool = True,
     ) -> Dict[str, Any]:
         """
-        ⚡ PRO FEATURE (FREE right now — LocalLens is in free preview, no license needed) — Delete a list of duplicate photos, sending them to the OS Trash
+        ⚡ PRO FEATURE — Delete a list of duplicate photos, sending them to the OS Trash
         (recoverable) rather than permanently erasing them.
 
         ⚠️  MANDATORY SAFETY WORKFLOW — NEVER SKIP THESE STEPS:

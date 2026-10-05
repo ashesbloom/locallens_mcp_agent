@@ -265,12 +265,12 @@ def is_pro_active() -> bool:
     return datetime.now(timezone.utc) < checked + _RECHECK_EVERY + _OFFLINE_GRACE
 
 
-# The paid tier is not live yet (Dodo store in test mode; docs/LAUNCH_CHECKLIST.md),
-# so nothing is gated. Flip to False only via docs/RESTORING_PAID_MODE.md — after
-# _PREVIEW_CUTOFF is set — and in lockstep with FREE_PREVIEW in the website's
-# src/content/pricing.ts: the site offering the product free while the MCP still
-# refuses a tool is the one combination that makes a liar of both.
-FREE_PREVIEW = True
+# Paid launch v1.5.0: the free preview is over and Pro is gated (preview users stay
+# unlocked through _PREVIEW_CUTOFF below). Moves only in lockstep with FREE_PREVIEW
+# in the website's src/content/pricing.ts — the site offering the product free while
+# the MCP refuses a tool, or quoting a price for something the MCP gives away, makes
+# a liar of both. See docs/RESTORING_PAID_MODE.md.
+FREE_PREVIEW = False
 
 # The paid-launch date, as an ISO-8601 string. Anyone whose install predates it was
 # a free-preview user and keeps Pro permanently — that is a public promise, not a
@@ -282,7 +282,7 @@ FREE_PREVIEW = True
 # paid mode silently never starts. Set it too early and the opposite happens:
 # preview users are reclassified as post-launch and lose Pro. See
 # docs/RESTORING_PAID_MODE.md and test_no_cutoff_set_means_nobody_has_arrived_late.
-_PREVIEW_CUTOFF: Optional[str] = None
+_PREVIEW_CUTOFF: Optional[str] = "2026-10-05T14:40:00Z"  # v1.5.0 paid launch
 
 
 def _onboarding_marker() -> Path:
@@ -817,7 +817,7 @@ def pro_upgrade_message() -> str:
     while the user is new. Never states a price — that is what the page is for.
     """
     base = (
-        "This is a Pro feature. Unlock it from the LocalLens tray menu → Plan, "
+        "This is a Pro feature. Unlock it from the LL tray menu → Activate Pro…, "
         "or with activate_pro_license(license_key='YOUR-KEY') if you already have a key."
     )
     if is_new_user():

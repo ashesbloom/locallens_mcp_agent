@@ -996,7 +996,7 @@ def register_status(mcp: FastMCP):
                     },
                 ]
                 result["cta"] = (
-                    "Upgrade from the LocalLens tray menu → Plan, or say 'activate my pro "
+                    "Upgrade from the LL tray menu → Activate Pro…, or say 'activate my pro "
                     "license' if you already have a key. Current plans and pricing are "
                     f"listed at {PRICING_URL}."
                 )
