@@ -51,6 +51,35 @@ test_env*.py
 for dev/
 for LLM's/
 
+# Internal planning, business and marketing docs. This repo is public; these
+# stay on the owner's machine. Nothing in tests, CI, the build or the release
+# pipeline reads them (they are only mentioned in comments). Public docs that
+# users need stay tracked: README, LICENSE.md, NOTICE.md, AGENTS.md,
+# docs/INSTRUCTIONS.md, docs/claude_desktop_config.example.json, release_notes/.
+docs/superpowers/
+docs/TESTING.md
+docs/PRICING.md
+docs/LAUNCH_CHECKLIST.md
+docs/RESTORING_PAID_MODE.md
+docs/LICENSE_PLANS_SPEC.md
+marketing/
+Preview/
+.superpowers/
+
+# Build outputs that land outside build/ and dist/ (makensis writes to the root)
+locallens-agent-installer.exe
+*-setup.exe
+*.log
+
+# Tool caches
+.mypy_cache/
+.ruff_cache/
+node_modules/
+
+# Windows
+Thumbs.db
+desktop.ini
+
 # Web development 
 locallensmcp/
 

@@ -1,0 +1,55 @@
+name: Windows Test Build
+
+# Builds the Windows installer for hand-testing and attaches it to the run as a
+# downloadable artifact. Publishes nothing: no release, no version.json, no tag.
+# Trigger: push to the windows-test-build branch, or "Run workflow" once this
+# file is on main. Release builds stay in release.yml.
+on:
+  push:
+    branches: [ windows-test-build ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ".[tray]" pyinstaller
+
+      - name: Build tray app and bundle locallens-mcp.exe
+        shell: pwsh
+        run: |
+          pyinstaller locallens-tray-win.spec
+          pyinstaller locallens-mcp.spec
+          Copy-Item "dist\locallens-mcp.exe" "dist\LocalLens Agent\locallens-mcp.exe"
+
+      - name: Smoke-test the bundled locallens-mcp.exe
+        shell: bash
+        run: '"dist/LocalLens Agent/locallens-mcp.exe" --claude-status'
+
+      - name: Build NSIS installer
+        shell: pwsh
+        run: |
+          choco install nsis --no-progress -y
+          New-Item -ItemType Directory -Force -Path build\installer | Out-Null
+          python -c "from PIL import Image; c = Image.new('RGB', (164, 314), 'white'); l = Image.open('icons/ll_red_trans/icon.png').convert('RGBA').resize((128, 128)); c.paste(l, (18, 40), l); c.save('build/installer/welcome.bmp', 'BMP')"
+          & "C:\Program Files (x86)\NSIS\makensis.exe" /DAPP_VERSION=test-${{ github.sha }} installer_win.nsi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: locallens-agent-windows-test
+          path: locallens-agent-installer.exe
+          retention-days: 7

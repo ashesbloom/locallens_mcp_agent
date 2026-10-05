@@ -51,4 +51,22 @@ copy /Y "dist\locallens-mcp.exe" "dist\LocalLens Agent\locallens-mcp.exe" >nul
 echo.
 echo Build complete!
 echo Executable: dist\LocalLens Agent\LocalLens Agent.exe
+
+:: Optional: the same installer CI ships, when NSIS is installed (choco install nsis).
+:: The welcome bitmap is generated the same way as in release.yml.
+set "MAKENSIS=C:\Program Files (x86)\NSIS\makensis.exe"
+if not exist "%MAKENSIS%" (
+    echo NSIS not found - skipping the installer.
+    pause
+    exit /b 0
+)
+if not exist "build\installer" mkdir "build\installer"
+python -c "from PIL import Image; c = Image.new('RGB', (164, 314), 'white'); l = Image.open('icons/ll_red_trans/icon.png').convert('RGBA').resize((128, 128)); c.paste(l, (18, 40), l); c.save('build/installer/welcome.bmp', 'BMP')"
+"%MAKENSIS%" /DAPP_VERSION=dev installer_win.nsi
+if %ERRORLEVEL% neq 0 (
+    echo INSTALLER BUILD FAILED! See errors above.
+    pause
+    exit /b 1
+)
+echo Installer: locallens-agent-installer.exe
 pause
