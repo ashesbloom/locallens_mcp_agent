@@ -279,7 +279,10 @@ def test_delete_duplicates_sends_canonical_paths_and_guidance_on_windows():
     windows_os = types.SimpleNamespace(path=ntpath, name="nt")
 
     async def _call():
-        with patch.object(pro_tools.httpx, "AsyncClient", _FakeClient), \
+        # delete_duplicates is Pro. Unlock it explicitly: otherwise the result depends on
+        # whether this machine's install stamp predates the paid launch (fresh CI: it doesn't).
+        with patch("mcp_server.license.pro_features_unlocked", return_value=True), \
+                patch.object(pro_tools.httpx, "AsyncClient", _FakeClient), \
                 patch.object(pro_tools, "os", windows_os):
             return await app.call_tool(
                 "delete_duplicates",

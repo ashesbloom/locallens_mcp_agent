@@ -219,3 +219,12 @@ against what the gate *does*.
 `set_version.py` rewrites the Licensed Work line on every release, so a test that
 `.replace()`s one exact version string silently no-ops after the next bump and
 fails during the release itself (v1.5.0). Match the line with a regex.
+
+## Tests that call a Pro tool must unlock it themselves
+
+Since the paid flip, whether a Pro tool runs depends on the machine's install stamp.
+The dev Mac predates the cutoff, so a test that drives a `@require_pro` tool passes
+locally and fails on a fresh CI runner (v1.5.0: `test_delete_duplicates_sends_canonical_paths_and_guidance_on_windows`,
+caught by CI Build Check *after* the tag). Patch `mcp_server.license.pro_features_unlocked`
+in any test that is not about licensing, and before tagging run the suite once with
+`HOME=$(mktemp -d)` to see what CI sees.
