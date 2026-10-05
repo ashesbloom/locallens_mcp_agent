@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Mayank Pandey - LL Agent. See LICENSE.md.
 """
 LocalLens MCP — Claude Desktop Connector
 ==========================================
@@ -699,7 +701,7 @@ def install_claude_connector(force: bool = False) -> Dict[str, Any]:
             "config_path": str(config_path),
             "command": desired_entry["command"],
             "message": (
-                f"LocalLens MCP server {action} successfully. "
+                f"LL Agent {action} successfully. "
                 "Please restart Claude Desktop to apply the changes."
             ),
             "backup_path": str(backup_path) if backup_path else None,

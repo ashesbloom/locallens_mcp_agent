@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Mayank Pandey - LL Agent. See LICENSE.md.
 """
 LocalLens Version Bumper & Release Preparation Tool (Python Edition)
 ======================================================================
@@ -92,7 +94,7 @@ def build_release_sections(version, highlights):
 # Each version is governed by the LICENSE.md it shipped with, so this never
 # touches an earlier release.
 
-_LICENSED_WORK_RE = re.compile(r"^(Licensed Work:\s+)LocalLens MCP Agent v\S+(?: and later)?[ \t]*$", re.M)
+_LICENSED_WORK_RE = re.compile(r"^(Licensed Work:\s+)(?:LocalLens MCP Agent|LL Agent) v\S+(?: and later)?[ \t]*$", re.M)
 _CHANGE_DATE_RE = re.compile(r"^(Change Date:\s+)\d{4}-\d{2}-\d{2}[ \t]*$", re.M)
 _NOTICE_DATE_RE = re.compile(r"^On \d{4}-\d{2}-\d{2}(, this version automatically becomes Apache 2\.0)", re.M)
 
@@ -115,7 +117,7 @@ def bump_license(license_text: str, notice_text: str, version: str, today: date)
     """
     change_date = four_years_after(today).isoformat()
     subs = [
-        ("LICENSE.md 'Licensed Work:'", _LICENSED_WORK_RE, rf"\g<1>LocalLens MCP Agent v{version}", "license"),
+        ("LICENSE.md 'Licensed Work:'", _LICENSED_WORK_RE, rf"\g<1>LL Agent v{version}", "license"),
         ("LICENSE.md 'Change Date:'", _CHANGE_DATE_RE, rf"\g<1>{change_date}", "license"),
         ("NOTICE.md 'On <date>, this version…'", _NOTICE_DATE_RE, rf"On {change_date}\g<1>", "notice"),
     ]
@@ -147,7 +149,7 @@ def main():
 
     highlights = args[1:]
     if not highlights:
-        highlights = [f"LocalLens MCP Agent v{version} release."]
+        highlights = [f"LL Agent v{version} release."]
 
     root_dir = Path(__file__).resolve().parent.parent
     month_year = datetime.now().strftime("%B %Y")

@@ -36,7 +36,7 @@ def test_four_years_after_keeps_the_calendar_day():
 def test_bump_rewrites_the_real_files():
     lic, notice, change = bump_license(LICENSE, NOTICE, "1.2.0", date(2026, 10, 1))
     assert change == "2030-10-01"
-    assert "Licensed Work:        LocalLens MCP Agent v1.2.0\n" in lic
+    assert "Licensed Work:        LL Agent v1.2.0\n" in lic
     assert "Change Date:          2030-10-01\n" in lic
     assert "On 2030-10-01, this version automatically becomes Apache 2.0" in notice
     # Nothing else in either file moves — the rest is legal text.
@@ -49,8 +49,18 @@ def test_bump_is_repeatable():
     # its own output, which says "v1.2.0" rather than "v1.0.34 and later".
     lic, notice, _ = bump_license(LICENSE, NOTICE, "1.2.0", date(2026, 10, 1))
     lic2, notice2, change = bump_license(lic, notice, "1.2.1", date(2026, 11, 5))
-    assert "LocalLens MCP Agent v1.2.1\n" in lic2 and "2030-11-05" in lic2
+    assert "LL Agent v1.2.1\n" in lic2 and "2030-11-05" in lic2
     assert change == "2030-11-05" and "On 2030-11-05," in notice2
+
+
+def test_bump_renames_a_licence_still_under_the_old_product_name():
+    # Every LICENSE.md released before v1.1.3 says "LocalLens MCP Agent"; the
+    # product is LL Agent now, and the next bump must carry the new name.
+    old = LICENSE.replace("Licensed Work:        LL Agent v1.0.34 and later",
+                          "Licensed Work:        LocalLens MCP Agent v1.0.34 and later")
+    assert "LocalLens MCP Agent v1.0.34" in old
+    lic, _, _ = bump_license(old, NOTICE, "1.2.0", date(2026, 10, 1))
+    assert "Licensed Work:        LL Agent v1.2.0\n" in lic
 
 
 @pytest.mark.parametrize("broken", ["LICENSE", "NOTICE"])
@@ -59,3 +69,17 @@ def test_bump_refuses_a_file_it_cannot_match(broken):
     notice = NOTICE.replace("this version automatically", "it") if broken == "NOTICE" else NOTICE
     with pytest.raises(ValueError, match="expected exactly 1"):
         bump_license(lic, notice, "1.2.0", date(2026, 10, 1))
+
+
+def test_preflight_accepts_what_set_version_writes(tmp_path, monkeypatch):
+    # The release gate and the bump script must agree on the Licensed Work name,
+    # or every release after a rename is refused at "LICENSE.md licenses exactly".
+    import preflight_release
+    lic, notice, _ = bump_license(LICENSE, NOTICE, "1.2.0", date.today())
+    (tmp_path / "LICENSE.md").write_text(lic, encoding="utf-8")
+    (tmp_path / "NOTICE.md").write_text(notice, encoding="utf-8")
+    monkeypatch.setattr(preflight_release, "ROOT", tmp_path)
+    monkeypatch.setattr(preflight_release, "_results", [])
+    preflight_release.check_license("1.2.0")
+    failed = [(name, detail) for ok, name, detail in preflight_release._results if not ok]
+    assert not failed

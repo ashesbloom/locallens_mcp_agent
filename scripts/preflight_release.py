@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Mayank Pandey - LL Agent. See LICENSE.md.
 """
-LocalLens Release Preflight
-===========================
+LL Agent Release Preflight
+==========================
 Usage: python scripts/preflight_release.py <version>
 
 Gates a release on the mistakes this project has actually made. Exits 0 when
@@ -199,7 +201,7 @@ def check_license(version: str) -> None:
     notice_text = (ROOT / "NOTICE.md").read_text(encoding="utf-8")
     work = re.search(r"^Licensed Work:\s+(.+?)\s*$", license_text, re.M)
     change = re.search(r"^Change Date:\s+(\d{4}-\d{2}-\d{2})\s*$", license_text, re.M)
-    work_ok = bool(work) and work.group(1) == f"LocalLens MCP Agent v{version}"
+    work_ok = bool(work) and work.group(1) == f"LL Agent v{version}"
     check(work_ok, f"LICENSE.md licenses exactly v{version}",
           f"Licensed Work is {work.group(1) if work else 'missing'!r} — run scripts/set_version.py")
     if not check(bool(change), "LICENSE.md has a Change Date", "no 'Change Date: YYYY-MM-DD' line"):

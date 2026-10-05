@@ -78,7 +78,7 @@ function buildReleaseSections(highlightList) {
 }
 
 if (highlights.length === 0) {
-  highlights.push(`LocalLens MCP Agent v${version} release.`);
+  highlights.push(`LL Agent v${version} release.`);
 }
 
 const rootDir = path.join(__dirname, '..');
@@ -100,7 +100,7 @@ console.log(`\n🚀 Preparing Release v${version} (${monthYear})\n`);
   const licensePath = path.join(rootDir, 'LICENSE.md');
   const noticePath = path.join(rootDir, 'NOTICE.md');
   const subs = [
-    ["LICENSE.md 'Licensed Work:'", 'license', /^(Licensed Work:\s+)LocalLens MCP Agent v\S+(?: and later)?[ \t]*$/gm, `$1LocalLens MCP Agent v${version}`],
+    ["LICENSE.md 'Licensed Work:'", 'license', /^(Licensed Work:\s+)(?:LocalLens MCP Agent|LL Agent) v\S+(?: and later)?[ \t]*$/gm, `$1LL Agent v${version}`],
     ["LICENSE.md 'Change Date:'", 'license', /^(Change Date:\s+)\d{4}-\d{2}-\d{2}[ \t]*$/gm, `$1${changeDate}`],
     ["NOTICE.md 'On <date>, this version…'", 'notice', /^On \d{4}-\d{2}-\d{2}(, this version automatically becomes Apache 2\.0)/gm, `On ${changeDate}$1`],
   ];

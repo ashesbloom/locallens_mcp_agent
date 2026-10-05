@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Mayank Pandey - LL Agent. See LICENSE.md.
 """
 LocalLens LLM Connector — Tool Registry
 =========================================
@@ -367,8 +369,8 @@ def abort_job() -> Dict[str, Any]:
 #  LICENSE TOOLS — Always available
 # ===================================================================
 
-def activate_pro_license(license_key: str) -> Dict[str, Any]:
-    """Activate a Pro license key. Requires one-time internet connection."""
+def _run_sync(coro) -> Dict[str, Any]:
+    """Run a license coroutine from this synchronous registry."""
     import asyncio
     try:
         loop = asyncio.get_event_loop()
@@ -376,10 +378,15 @@ def activate_pro_license(license_key: str) -> Dict[str, Any]:
             # We're inside an existing event loop (e.g. Gradio) — run in a new thread
             import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor() as pool:
-                return pool.submit(asyncio.run, activate_license(license_key)).result()
-        return loop.run_until_complete(activate_license(license_key))
+                return pool.submit(asyncio.run, coro).result()
+        return loop.run_until_complete(coro)
     except RuntimeError:
-        return asyncio.run(activate_license(license_key))
+        return asyncio.run(coro)
+
+
+def activate_pro_license(license_key: str) -> Dict[str, Any]:
+    """Activate a Pro license key. Requires an internet connection."""
+    return _run_sync(activate_license(license_key))
 
 
 def get_license_status() -> Dict[str, Any]:
@@ -389,7 +396,7 @@ def get_license_status() -> Dict[str, Any]:
 
 def revoke_pro_license() -> Dict[str, Any]:
     """Revoke the current Pro license, reverting to Free tier."""
-    return deactivate_license()
+    return _run_sync(deactivate_license())
 
 
 # ===================================================================

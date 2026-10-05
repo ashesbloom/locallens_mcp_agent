@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Mayank Pandey - LL Agent. See LICENSE.md.
 """
 locallens_mcp_entrypoint.py
 Top-level PyInstaller entrypoint — no relative imports here.

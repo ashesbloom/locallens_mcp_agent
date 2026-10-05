@@ -23,11 +23,11 @@ v1.0.31 all carry literal `\`\`\`bash` where a code block should be.
 
 ## GitHub Release Note Template
 
-# LocalLens Agent {VERSION}
+# LL Agent {VERSION}
 
 **Organize your photo library by talking to Claude. Everything runs on your machine — no uploads, no cloud, not even metadata.**
 
-LocalLens MCP Agent connects Claude Desktop (or any MCP-compatible AI assistant) to your local [LocalLens](https://locallensmcp.vercel.app) photo organizer.
+LL Agent connects Claude Desktop (or any MCP-compatible AI assistant) to your local [LocalLens](https://locallensmcp.vercel.app) photo organizer.
 
 {RELEASE_SECTIONS}
 
@@ -76,7 +76,7 @@ On Windows that is `.\locallens-mcp.exe --setup-claude`. Restart Claude Desktop 
 
 ---
 
-## ⬆️ Already have LocalLens Agent?
+## ⬆️ Already have LL Agent?
 
 Open the **LocalLens tray menu → Check for Updates → Install Update**. It downloads, verifies the checksum and installs for you.
 
@@ -153,7 +153,7 @@ for how it works.
 ## 🚀 Getting started
 
 1. Install the **LocalLens desktop app** and run it once — [download](https://locallensmcp.vercel.app/#download)
-2. Install LocalLens Agent using any method above
+2. Install LL Agent using any method above
 3. Restart Claude Desktop
 4. Ask Claude: *"Check if LocalLens is running"*
 

@@ -1,4 +1,4 @@
-## LocalLens MCP Release — {{tag_name}}
+## LL Agent Release — {{tag_name}}
 
 This release bundles `locallens-mcp` into standalone native executables for macOS, Windows, and Linux. No Python runtime is required on your machine.
 

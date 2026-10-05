@@ -1,4 +1,6 @@
-# Project: LocalLens MCP Agent
+# Project: LL Agent (codebase: locallens_mcp_agent)
+
+@AGENTS.md
 
 > MCP server that bridges AI assistants (Claude Desktop, Cursor, etc.) to the LocalLens privacy-first photo organizer. Speaks stdio JSON-RPC to the AI client, HTTP to the LocalLens FastAPI backend on localhost.
 
@@ -48,8 +50,9 @@ Ollama (local LLM)                 ← Process 4, only needed for Chat UI
 
 - MCP Server and Chat UI are **completely independent** paths to the same backend.
 - The MCP server makes no outbound calls except license activation, plus a periodic
-  re-validation for subscriptions only. Lifetime keys (`expires_at` is None) never re-check —
-  keep that fast path intact, it is what makes the privacy claim literally true for them.
+  re-validation for subscriptions only (weekly, Dodo `/licenses/validate`). Non-expiring keys
+  (`kind: non_expiring` — the free founding keys, detected by the Founding product name) never
+  re-check — keep that fast path intact, it is what makes the privacy claim literally true for them.
 - **stdout is sacred** — it carries the MCP JSON-RPC channel. ALL logging MUST go to stderr.
 
 ## Structure
@@ -60,8 +63,8 @@ src/
     main.py                    # Entrypoint, CLI arg parsing, creates FastMCP app
     config.py                  # Dynamic port discovery, auth token reader
     license.py                 # Pro tier activation, @require_pro decorator, local cache
-    updater.py                 # Version check against locallens.app/version.json
-    claude_connector.py        # Programmatic Claude Desktop config injection (771 lines)
+    updater.py                 # Version check against version.json on raw.githubusercontent.com
+    claude_connector.py        # Programmatic Claude Desktop config injection
     tools/
       __init__.py
       status.py                # check_app_status, get_stats, get_job_progress, locallens_help
@@ -73,10 +76,12 @@ src/
     tool_registry.py           # Maps natural language → LocalLens API calls for Ollama
   tray/                        # System tray app (macOS rumps / Windows pystray)
     tray_mac.py, tray_win.py, actions.py, status.py
+    activation.py, activate_window.py, activate_window.html   # Activate Pro window (child process, pywebview)
   chat_ui.py                   # Gradio Chat UI entrypoint
 
-tests/
-  test_claude_connector.py     # 573 lines, comprehensive unit tests for connector
+tests/                         # 20 test files: connector, license expiry, free preview,
+                               # instructions/prose guards, tray, paths, update installer,
+                               # Activate Pro window, licence notices + naming guard
 
 docs/                          # Testing & installation documentation, example configs
 scripts/                       # Release automation scripts (set_version.py / set_version.js)
@@ -93,6 +98,7 @@ locallens_tray_entrypoint.py   # PyInstaller entrypoint for tray app
 
 ## Conventions
 
+- **Naming** — the product is **LL Agent**; its paid tier is **LL Agent Pro** (there is no LocalLens-branded Pro tier). "LocalLens" alone means the separate photo-organizer app — keep it wherever it means that. Everything people or the LLM read says LL Agent. The *install identity* stays "LocalLens Agent" (`.app`/`.exe`, DMG, installer, Homebrew cask, updater bundle path, Claude config key `"locallens"`, Windows mutex): renaming it breaks auto-update and existing Claude configs unless a release ships a migration. `tests/test_license_notices.py` guards the Pro name.
 - **Python 3.10+** required (`pyproject.toml` declares `>=3.10`)
 - **Async everywhere** — all MCP tool functions are `async def`, use `httpx.AsyncClient`
 - **All logging → stderr** — never `print()` to stdout in the mcp_server package. Use module-level `_log = logging.getLogger(...)` with `StreamHandler(sys.stderr)` and `_log.propagate = False`
@@ -107,7 +113,7 @@ locallens_tray_entrypoint.py   # PyInstaller entrypoint for tray app
 - **primary_sort values**: exactly `"Date"`, `"Location"`, or `"People"` — auto-correct `"Faces"` → `"People"`
 - **No type: ignore comments** — code uses standard typing throughout
 - **Job polling** — `_wait_for_completion()` in actions.py handles stale-state guards, min 0.5s poll interval
-- **Version** — bump `MCP_VERSION` in `updater.py` on every release (currently `"1.0.0"`)
+- **Version** — `MCP_VERSION` in `updater.py` (currently `"1.1.2"`). Releases go through `/release-agent` + `scripts/preflight_release.py`; `version.json` `mcp.latest` is CI-owned
 
 ## Trace before you change (MANDATORY)
 
@@ -144,7 +150,7 @@ revert those surgically. Never `rm` an untracked file; git cannot restore it.
 | `LOCALLENS_DEV_KEY` | Test license key for dev bypass |
 | `LOCALLENS_STORE_URL` | Store URL shown in Pro upgrade prompts (default: `https://locallensmcp.vercel.app`) |
 | `LOCALLENS_PRICING_URL` | Pricing page linked from upgrade prompts (default: `https://locallensmcp.vercel.app/#pricing`) |
-| `LOCALLENS_LICENSE_URL` | Lemon Squeezy license API base URL |
+| `LOCALLENS_LICENSE_URL` | Dodo license API base (default `https://live.dodopayments.com/licenses`; set `https://test.dodopayments.com/licenses` for test-mode keys). Public endpoints, no API key |
 | `LOCALLENS_VERSION_URL` | Version manifest URL for update checker |
 | `LOCALLENS_BACKEND_DIR` | Path to LocalLens backend dir (for scheduler daemon launch) |
 | `LOCALLENS_OLLAMA_MODEL` | Ollama model name for Chat UI (default: `llama3.1:8b`) |
@@ -169,7 +175,7 @@ revert those surgically. Never `rm` an untracked file; git cannot restore it.
 - **Stale job status** — `_wait_for_completion()` requires the job to transition through `is_active=True` before accepting a terminal status. Without this guard, it exits immediately on stale state from a previous job.
 - **Claude connector is atomic** — uses temp-file + `os.replace()` to prevent partial config corruption. Always preserve other mcpServers entries.
 - **Claude connector backs up** — creates timestamped backups before writes, capped at 5. Never skip this.
-- **License machine lock** — `mcp_license.json` contains a `machine_id` (SHA-256 of hostname + MAC). Copying the file to another machine won't work.
+- **License machine lock** — `mcp_license.json` contains a `machine_id` (SHA-256 of hostname + MAC). Copying the file to another machine won't work. When `uuid.getnode()` is random (multicast bit — every process on recent macOS) the OS hardware ID is hashed instead (`_hardware_uuid()`: IOPlatformUUID / MachineGuid / machine-id); otherwise every process sees a different id and drops the cache.
 - **`analyse_folder` does a local filesystem scan + backend HTTP call** — it's a hybrid tool. The subfolder scan is local (os.scandir), metadata overview comes from the backend.
 - **`add_face_enroll` accepts a dict, not a list** — the enrollments param is `{"Person Name": "/path/to/folder"}`. There's a guard for double-nested `enrollments.enrollments` from LLM copy-paste bugs.
 - **`find_duplicates` timeout is 120s** — large folders can take a while to hash. Don't reduce this.

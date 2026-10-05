@@ -1,4 +1,4 @@
-# LocalLens MCP Agent — Instructions
+# LL Agent — Instructions
 
 > **Who is this for?** Anyone setting up, running, or debugging the LocalLens AI features.
 > Read this top-to-bottom the first time. After that, jump to the scenario you need.
@@ -115,7 +115,7 @@ Expected output:
   "status": "installed",
   "config_path": "/Users/you/Library/Application Support/Claude/claude_desktop_config.json",
   "command": "/Users/you/.../venv/bin/locallens-mcp",
-  "message": "LocalLens MCP server installed successfully. Please restart Claude Desktop to apply the changes.",
+  "message": "LL Agent installed successfully. Please restart Claude Desktop to apply the changes.",
   "claude_needs_restart": true
 }
 ```
@@ -237,10 +237,12 @@ locallens-mcp    # It will wait for stdin — Ctrl+C to stop
 # 4. Run Chat UI
 locallens-chat
 
-# 5. Enable Pro features for dev testing (bypass license check):
+# 5. Enable Pro features for dev testing (bypass license check).
+#    Not needed while FREE_PREVIEW is on — every Pro tool already runs.
+#    Both variables are required; the key you activate with must match LOCALLENS_DEV_KEY.
 export LOCALLENS_MCP_DEBUG=1
-# Then activate with the test key via the chat UI:
-# "activate my license" → use key: TEST-PRO-KEY-1234
+export LOCALLENS_DEV_KEY="any-local-test-key"
+# Then: activate_pro_license(license_key="any-local-test-key")
 ```
 
 ---
@@ -288,7 +290,9 @@ export LOCALLENS_MCP_DEBUG=1
 ### Pro tools return "pro_required" in dev
 ```bash
 export LOCALLENS_MCP_DEBUG=1
-# Activate via chat UI with key: TEST-PRO-KEY-1234
+export LOCALLENS_DEV_KEY="any-local-test-key"
+# Then activate with that same key: activate_pro_license(license_key="any-local-test-key")
+# For a real end-to-end test, buy in Dodo test mode instead (LAUNCH_CHECKLIST.md Phase 5).
 ```
 
 ---

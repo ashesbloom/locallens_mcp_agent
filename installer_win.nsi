@@ -54,6 +54,9 @@ machine — no photos are ever uploaded.$\r$\n$\r$\nClick Next to continue."
 $\r$\n$\r$\nLook for it in the system tray, next to the clock."
 
 !insertmacro MUI_PAGE_WELCOME
+; The BSL 1.1 terms, accepted before install ("I Agree"). Path is relative to
+; this script, i.e. the repo root.
+!insertmacro MUI_PAGE_LICENSE "LICENSE.md"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
@@ -92,6 +95,9 @@ Section "Install"
     ; Copy everything PyInstaller put in dist\LocalLens Agent\
     ; Use * not *.* — the Windows *.* glob skips extension-less files
     File /r "dist\LocalLens Agent\*"
+    ; The terms travel with the app (removed by the uninstaller's RMDir /r).
+    File "LICENSE.md"
+    File "NOTICE.md"
 
     ; Write uninstaller and registry entries
     WriteUninstaller "$INSTDIR\Uninstall.exe"

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Mayank Pandey - LL Agent. See LICENSE.md.
 import json
 import logging
 import sys
@@ -18,6 +20,7 @@ except ImportError:
     pass
 
 from .license import _stamp_onboarding_if_absent
+from .updater import MCP_VERSION
 from .tools.status import register_status
 from .tools.queries import register_queries
 from .tools.actions import register_actions
@@ -26,7 +29,7 @@ from .tools.pro_tools import register_pro_tools
 def create_mcp_app() -> FastMCP:
     """Create and configure the FastMCP application."""
     mcp = FastMCP(
-        "LocalLens Agent",
+        "LL Agent",
         # ── BUDGETED PROSE — KEEP SHORT, KEEP SAFETY FIRST ──────────────────
         # Clients TRUNCATE this blob. A measured Claude client delivered only
         # the first 2725 chars of the 5054-char version and cut mid-word,
@@ -99,12 +102,12 @@ Responses may include a "next_actions" array — present these as natural follow
 
 def main():
     parser = argparse.ArgumentParser(
-        description="LocalLens MCP Server",
+        description="LL Agent — MCP server for the LocalLens photo organizer",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Claude Desktop integration commands:\n"
-            "  --setup-claude    Inject LocalLens into Claude Desktop config and exit\n"
-            "  --remove-claude   Remove LocalLens from Claude Desktop config and exit\n"
+            "  --setup-claude    Inject LL Agent into Claude Desktop config and exit\n"
+            "  --remove-claude   Remove LL Agent from Claude Desktop config and exit\n"
             "  --claude-status   Print connection status as JSON and exit\n"
         ),
     )
@@ -120,12 +123,12 @@ def main():
     claude_group.add_argument(
         "--setup-claude",
         action="store_true",
-        help="Inject LocalLens MCP server into Claude Desktop config and exit",
+        help="Inject LL Agent into Claude Desktop config and exit",
     )
     claude_group.add_argument(
         "--remove-claude",
         action="store_true",
-        help="Remove LocalLens MCP server from Claude Desktop config and exit",
+        help="Remove LL Agent from Claude Desktop config and exit",
     )
     claude_group.add_argument(
         "--claude-status",
@@ -135,7 +138,7 @@ def main():
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Force re-injection even if LocalLens is already connected (use with --setup-claude)",
+        help="Force re-injection even if LL Agent is already connected (use with --setup-claude)",
     )
 
     args, _unknown = parser.parse_known_args()
@@ -173,6 +176,11 @@ def main():
         if not (isinstance(h, logging.StreamHandler) and h.stream is sys.stdout)
     ]
 
+    # The terms travel with every copy: this lands in Claude Desktop's MCP log
+    # (stderr — stdout is the JSON-RPC channel).
+    print(f"[locallens-mcp] LL Agent v{MCP_VERSION} is source-available under the Business "
+          "Source License 1.1 (LICENSE.md). Using Pro features in production needs a license "
+          "key, and a copy with the key check removed or bypassed is not licensed.", file=sys.stderr)
     app = create_mcp_app()
     app.run()
 

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="icons/LLAgent_logo_red_readme.png" width="350" alt="LocalLens Agent Logo">
+  <img src="icons/LLAgent_logo_red_readme.png" width="350" alt="LL Agent logo">
 </p>
 
 <p align="center">
@@ -9,16 +9,16 @@
   <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-BSL--1.1-blue" alt="License"></a>
 </p>
 
-# LocalLens MCP Server
+# LL Agent
 
 > **Your Photos. Your Machine. Your Rules.**
 
-LocalLens MCP is the AI bridge for [LocalLens](https://locallensmcp.vercel.app) — a privacy-first photo organizer that runs 100% on your computer. Connect it to Claude Desktop (or any MCP-compatible AI) and organize, search, and manage your entire photo library using plain English.
+[LL Agent](https://locallensmcp.vercel.app) is the AI bridge for LocalLens — a privacy-first photo organizer that runs 100% on your computer. Connect it to Claude Desktop (or any MCP-compatible AI) and organize, search, and manage your entire photo library using plain English.
 
 **Zero data leaves your machine. Not even metadata.**
 
 > 🎉 **Free preview:** every Pro feature below is unlocked for everyone right now — no
-> license, no signup. If you're using LocalLens during the preview, you keep all of it
+> license, no signup. If you're using LL Agent during the preview, you keep all of it
 > free, permanently, once paid plans launch. Not a trial ending — a thank-you for being
 > here early. Details: [locallensmcp.vercel.app/#pricing](https://locallensmcp.vercel.app/#pricing).
 
@@ -155,7 +155,7 @@ Add the following to your Claude Desktop config file:
 
 Restart Claude Desktop. LocalLens tools will appear in Claude's tool panel.
 
-> See [`claude_desktop_config.example.json`](claude_desktop_config.example.json) for the full config with all options.
+> See [`claude_desktop_config.example.json`](docs/claude_desktop_config.example.json) for an annotated example.
 
 ---
 
@@ -203,7 +203,7 @@ during the preview, no license needed:
 | `list_schedules` | List all active schedules and folder watchers |
 | `manage_schedule` | Pause, resume, or delete a schedule |
 | `open_scheduler_dashboard` | Open the scheduler web dashboard |
-| `smart_album_suggestions` | AI-powered album grouping suggestions for your library |
+| `smart_album_suggestions` | Album grouping suggestions (coming soon — not yet functional) |
 
 ### Quick comparison
 
@@ -226,36 +226,46 @@ during the preview, no license needed:
 Nothing to do right now — Pro tools already run with no key while the free preview is
 on. Just ask Claude to use them.
 
-Once paid plans launch, activation will look like this:
+Once paid plans launch, LL Agent Pro is a yearly or monthly subscription, sold through
+[Dodo Payments](https://dodopayments.com) as merchant of record (they handle payment and
+tax, and email your license key). There is no lifetime plan. To activate, either:
 
-```
-activate_pro_license(license_key="YOUR-LICENSE-KEY")
-```
+- **In the app:** click **LL** in the menu bar (on Windows, the system tray), choose
+  **Activate Pro…**, and paste your key; or
+- **In Claude Desktop:** say "activate my LL Agent license" followed by your key.
 
-Activation requires internet **once**. After that, all Pro features work fully offline.
-And if you're already using LocalLens today, that step won't be required of you anyway —
+Activation needs the internet. A subscription then re-checks about once a week and keeps
+working for 14 days offline; a founding key never checks again. A key works on up to 3 of
+your machines. And if you're already using LL Agent today, you won't need a key at all —
 see the free preview note above.
 
 ---
 
 ## Privacy
 
-LocalLens MCP is a strictly local server. It:
+LL Agent is a strictly local server. It:
 
 - Communicates exclusively with the LocalLens app on your machine via `localhost`
 - Never sends photos, file paths, or metadata to any external server
 - Discovers the LocalLens backend automatically via `~/.config/LocalLens/port.txt`
 - Stores the Pro license cache at `~/.config/LocalLens/mcp_license.json` (local only)
 
-A non-expiring key (the free keys for founding users) makes **exactly one** network request,
-ever: activation. Nothing after it. A subscription re-checks periodically to confirm it is still active — no photos, paths or
-metadata are sent either way, only the license key.
+License checks go to Dodo Payments' public license endpoint. They send the license key and
+an anonymous ID for this machine (a hash, so the key's 3 activations can be told apart) —
+never photos, file paths, metadata or your hostname. A non-expiring key (the free keys for
+founding users) makes **exactly one** network request, ever: activation. A subscription
+re-checks about once a week, and keeps working for 14 days past its last successful check
+if you are offline.
 
 ---
 
 ## License
 
-This software is distributed under the [Business Source License 1.1](LICENSE.md).
-Free for personal use. Commercial and SaaS use requires a Pro license.
-
-See [NOTICE.md](NOTICE.md) for third-party licenses.
+LL Agent is source-available under the [Business Source License 1.1](LICENSE.md)
+(BUSL-1.1), © 2026 Mayank Pandey. You may read, fork and modify it, run it for testing,
+development and education, and use the Free-tier tools on your photos. Using Pro features
+on real photo libraries — personal or commercial — needs a license key, except during the
+free preview and for users who installed before paid plans launched. Using Pro in a copy
+whose license-key check was removed or bypassed is not licensed. Each version becomes Apache 2.0
+on its Change Date. Summary: [NOTICE.md](NOTICE.md). AI coding agents: see
+[AGENTS.md](AGENTS.md).

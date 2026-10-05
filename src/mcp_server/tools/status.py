@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Mayank Pandey - LL Agent. See LICENSE.md.
 import asyncio
 import os
 import httpx
@@ -194,7 +196,7 @@ def register_status(mcp: FastMCP):
                         "before the status table. Format it exactly like this:\n\n"
                         f"---\n"
                         f"## 🚨 Critical Update Required\n\n"
-                        f"**LocalLens MCP {update_info['latest_version']}** is available "
+                        f"**LL Agent {update_info['latest_version']}** is available "
                         f"and your version (`{update_info['current_version']}`) is **no longer supported**.\n\n"
                         f"{whats_new_block}"
                         f"### How to upgrade:\n"
@@ -209,7 +211,7 @@ def register_status(mcp: FastMCP):
                         "Format it exactly like this:\n\n"
                         f"---\n"
                         f"## ✨ Update Available — v{update_info['latest_version']}\n\n"
-                        f"A new version of LocalLens MCP is ready! "
+                        f"A new version of LL Agent is ready! "
                         f"You are on `{update_info['current_version']}`.\n\n"
                         f"{whats_new_block}"
                         f"### How to upgrade:\n"

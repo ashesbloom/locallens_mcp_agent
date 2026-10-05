@@ -1,18 +1,24 @@
 # Business Source License 1.1
 
 Licensor:             Mayank Pandey
-Licensed Work:        LocalLens MCP Agent v1.0.34 and later
+Licensed Work:        LL Agent v1.0.34 and later
                       The Licensed Work is (c) 2026 Mayank Pandey
 
 Additional Use Grant: You may use the Licensed Work for non-production purposes,
-                      including personal use, testing, development, and education,
-                      without a commercial license.
+                      such as testing, development, evaluation and education, and you
+                      may use its Free-tier features in production, without a license
+                      key.
 
-                      Production use of Pro-tier features requires a valid license key
-                      obtained from https://locallensmcp.vercel.app/pricing, except
-                      where the Licensed Work itself unlocks those features without a
-                      key, as it does during the free preview and for users who
-                      installed it before paid plans launched.
+                      Using Pro-tier features on real photo libraries, whether
+                      personal or commercial, is production use and requires a valid
+                      license key obtained from https://locallensmcp.vercel.app/pricing,
+                      except where the Licensed Work itself unlocks those features
+                      without a key, as it does during the free preview and for users
+                      who installed it before paid plans launched.
+
+                      This grant does not cover any use of Pro-tier features in a copy
+                      of the Licensed Work whose license-key check has been removed,
+                      disabled or circumvented.
 
 Change Date:          2030-08-08
 

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Mayank Pandey - LL Agent. See LICENSE.md.
 """
 LocalLens MCP Agent — Pro Tools
 ================================
@@ -374,8 +376,8 @@ def register_pro_tools(mcp: FastMCP):
         face enrollment, scheduled auto-organize, and more.
 
         Purchase a license at https://locallensmcp.vercel.app
-        Requires a one-time internet connection. After activation,
-        all Pro features work fully offline.
+        Needs an internet connection to activate. Pro features then run locally;
+        a subscription key re-checks about once a week, a founding key never.
         """
         return await activate_license(license_key)
 
@@ -399,7 +401,7 @@ def register_pro_tools(mcp: FastMCP):
         Revoke/Deactivate the current Pro license.
         This immediately reverts the application to the Free tier and removes local license data.
         """
-        return deactivate_license()
+        return await deactivate_license()
 
     # ======================================================================
     #  PRO TOOLS — Require active license
