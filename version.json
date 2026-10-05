@@ -1,16 +1,16 @@
 {
   "mcp": {
-    "latest": "1.1.2",
+    "latest": "1.5.0",
     "min_supported": "1.0.0",
     "release_notes_url": "https://github.com/ashesbloom/locallens_mcp_agent/releases/latest",
     "downloads": {
       "macos-arm64": {
-        "url": "https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v1.1.2/locallens-agent-v1.1.2-macos-arm64.dmg",
-        "sha256": "4eb8f514b00b311fc87cb43d155546ecbf118e1a2c4ee3c72ad9636a8da1cfe9"
+        "url": "https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v1.5.0/locallens-agent-v1.5.0-macos-arm64.dmg",
+        "sha256": "f584dab51e2621177ea3264134d0698407498def6e1c3c4e507928cb2ed9c01d"
       },
       "windows-x86_64": {
-        "url": "https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v1.1.2/locallens-agent-v1.1.2-windows-x86_64-setup.exe",
-        "sha256": "a99719f2d202e052641e6efb11e89b6edb201d8af8136a56b1559963eeb9315e"
+        "url": "https://github.com/ashesbloom/locallens_mcp_agent/releases/download/v1.5.0/locallens-agent-v1.5.0-windows-x86_64-setup.exe",
+        "sha256": "3507186282914aff0d2f3dd1e42799612cb3ee53fc37b3a02060614c8f4c046a"
       }
     },
     "changelog": [
