@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Mayank Pandey - LL Agent. See LICENSE.md.
 """
 Optional-import audit
 =====================
@@ -61,6 +63,7 @@ ALIASES = {
     "win32api": "pywin32",
     "pythoncom": "pywin32",
     "pywintypes": "pywin32",
+    "webview": "pywebview",
 }
 
 

@@ -55,6 +55,7 @@ tray = [
     "Pillow>=10.0.0",
     "rumps>=0.4.0; sys_platform == 'darwin'",
     "pystray>=0.19.0; sys_platform == 'win32'",
+    "pywebview>=5.0",  # Activate Pro window (src/tray/activate_window.py)
 ]
 
 [project.scripts]
@@ -63,6 +64,11 @@ locallens-chat = "chat_ui:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# The Activate Pro window's page. Without this a non-editable `pip install .`
+# (what build_tray_mac.sh does before py2app copies `tray`) leaves it out.
+[tool.setuptools.package-data]
+tray = ["*.html"]
 
 [tool.pytest.ini_options]
 # Test the working tree, not whatever snapshot happens to sit in site-packages.

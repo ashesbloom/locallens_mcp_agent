@@ -10,6 +10,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('icons', 'icons'),
+        ('src/tray/activate_window.html', 'tray'),
     ],
     hiddenimports=[
         'pystray',
@@ -24,6 +25,12 @@ a = Analysis(
         'tray.tray_win',
         'tray.actions',
         'tray.status',
+        'tray.activation',
+        'tray.activate_window',
+        'webview',
+        'webview.platforms.winforms',  # what pywebview's guilib imports on Windows
+        'webview.platforms.edgechromium',
+        'clr',
         'mcp_server',
         'mcp_server.claude_connector',
         'mcp_server.config',

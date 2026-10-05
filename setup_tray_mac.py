@@ -1,7 +1,10 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Mayank Pandey - LL Agent. See LICENSE.md.
 from setuptools import setup
 
 APP = ['locallens_tray_entrypoint.py']
-DATA_FILES = []
+# The terms travel with the app: LICENSE.md and NOTICE.md land in Contents/Resources.
+DATA_FILES = ['LICENSE.md', 'NOTICE.md']
 
 OPTIONS = {
     'argv_emulation': False,
@@ -31,6 +34,9 @@ OPTIONS = {
         'jsonschema', 'jsonschema_specifications', 'referencing', 'rpds',
         'attr', 'attrs', 'packaging',
         'dotenv',
+        # Activate Pro window: pywebview, plus `tray` as a whole package so
+        # activate_window.html ships next to activate_window.py.
+        'tray', 'webview',
     ],
 }
 

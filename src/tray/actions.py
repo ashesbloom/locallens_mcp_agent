@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Mayank Pandey - LL Agent. See LICENSE.md.
 import sys
 import os
 import signal
@@ -472,6 +474,35 @@ def copy_to_clipboard(text: str) -> bool:
     return False
 
 
+def read_clipboard() -> str:
+    """
+    Text on the system clipboard, or "" if it can't be read. The inverse of
+    copy_to_clipboard, with the same encoding care: pbpaste also decodes with the
+    locale charset, and Finder-launched apps inherit no LC_CTYPE.
+
+    The Activate Pro window reads the clipboard through this rather than
+    navigator.clipboard, which WKWebView puts behind a permission prompt.
+    """
+    try:
+        if sys.platform == "darwin":
+            out = subprocess.run(
+                ["pbpaste"], capture_output=True, timeout=5,
+                env={**os.environ, "LC_CTYPE": "UTF-8"},
+            )
+        elif sys.platform == "win32":
+            out = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-Clipboard -Raw"],
+                capture_output=True, timeout=5,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        else:
+            return ""
+        return out.stdout.decode("utf-8", "replace") if out.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
 # ── Status glyphs ────────────────────────────────────────────────────────────
 # Geometric Shapes (U+25xx), deliberately NOT emoji. Win32 MessageBoxW and the
 # pystray Win32 menus both draw through GDI, which has no color-emoji fallback —
@@ -493,7 +524,7 @@ STATUS_ALERT    = "▲"  # attention — connection error / update ready
 _ONBOARD_MARKER = APP_DIR / "tray_onboarded.txt"
 
 _WELCOME_TEXT = (
-    "Welcome to LocalLens Agent! Here's how to get started:\n\n"
+    "Welcome to LL Agent! Here's how to get started:\n\n"
     "1. Click \"Local Lens\" in the menu bar to start the backend.\n"
     "2. Open \"Claude\" → \"Connect to Claude\", then restart Claude Desktop.\n"
     "3. Ask Claude to sort or analyse a photo folder — LocalLens tools appear automatically.\n\n"
@@ -519,13 +550,16 @@ _HELP_TEXT = (
     f"  {STATUS_EXTERNAL}   Running · Managed by App — the LocalLens desktop app "
     "controls the backend\n\n"
     "Tip: after connecting or disconnecting, restart Claude Desktop "
-    "so it picks up the change."
+    "so it picks up the change.\n\n"
+    "License: LL Agent is source-available under the Business Source License 1.1. "
+    "Pro features in production need a license key. "
+    "Terms: locallensmcp.vercel.app/license"
 )
 
 
 def show_welcome():
     """One-time onboarding alert shown on the tray's first-ever launch."""
-    _show_alert("Welcome to LocalLens", _WELCOME_TEXT)
+    _show_alert("Welcome to LL Agent", _WELCOME_TEXT)
 
 
 def show_help_tips():
@@ -703,7 +737,7 @@ def start_locallens():
                 ctypes.windll.user32.MessageBoxW(
                     0,
                     "The Local Lens download page has been opened in your browser.\n\n"
-                    "Install Local Lens and then restart the LocalLens Agent tray.",
+                    "Install Local Lens and then restart the LL Agent tray.",
                     "Download Started",
                     0x40  # MB_ICONINFORMATION
                 )
@@ -1122,7 +1156,7 @@ def claude_setup() -> dict:
     "already_connected"/"error"), so it silently never fired.
     """
     if not _connector_available:
-        _show_alert("Error", "Claude connector not available. Please reinstall LocalLens MCP.")
+        _show_alert("Error", "Claude connector not available. Please reinstall LL Agent.")
         return {"status": "error"}
     try:
         res = install_claude_connector(force=False)

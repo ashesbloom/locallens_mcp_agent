@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Mayank Pandey - LL Agent. See LICENSE.md.
 import rumps
 import threading
 import time
@@ -13,6 +15,7 @@ from .actions import (
     CLAUDE_CUSTOM_INSTRUCTIONS, CLAUDE_INSTRUCTIONS_HOWTO,
     STATUS_OFF, STATUS_STARTING, STATUS_ON, STATUS_EXTERNAL, STATUS_ALERT,
 )
+from .activation import ACTIVATE_FALLBACK_MESSAGE, launch_activate_window
 
 # Claude Status now reflects whether LocalLens is actually registered as an
 # MCP server in Claude's config (get_claude_connection_state) — NOT whether
@@ -95,7 +98,7 @@ _UPDATE_CHECK_INTERVAL_SECONDS = 3600
 
 def _queue_update_notifications(update_info: dict):
     """Append a one-time _pending_alerts entry for any update not already surfaced this session."""
-    labels = {"mcp": "LocalLens MCP Connector", "app": "LocalLens App"}
+    labels = {"mcp": "LL Agent", "app": "LocalLens App"}
     for key, label in labels.items():
         info = update_info.get(key)
         if not info or not info.get("update_available"):
@@ -203,7 +206,10 @@ class LocalLensAgentApp(rumps.App):
 
         # ── Help & Quit ─────────────────────────────────────────────────
         self.btn_help = rumps.MenuItem("Help & Getting Started", callback=self.on_help)
-        self.btn_quit = rumps.MenuItem("Quit LocalLens Agent", callback=self.on_quit)
+        self.btn_quit = rumps.MenuItem("Quit LL Agent", callback=self.on_quit)
+        # Pro activation — the item /thanks names (copy.thanks.activateApp).
+        # _update_updates_button flips it to "★  Pro — Active" once licensed.
+        self.btn_activate = rumps.MenuItem("Activate Pro…", callback=self.on_activate)
 
         self.menu = [
             self.btn_open_claude,
@@ -212,6 +218,8 @@ class LocalLensAgentApp(rumps.App):
             self.btn_ll_status,
             None,
             self.btn_updates,
+            None,
+            self.btn_activate,
             None,
             self.btn_help,
             None,
@@ -315,6 +323,13 @@ class LocalLensAgentApp(rumps.App):
         else:
             self.btn_info_plan.title = f"  ℹ  Plan: {tier}"
 
+        if info.get("license_activated"):
+            self.btn_activate.title = "★  Pro — Active"
+            self.btn_activate.set_callback(self.on_plan)
+        else:
+            self.btn_activate.title = "Activate Pro…"
+            self.btn_activate.set_callback(self.on_activate)
+
         app_ver = info.get("app_version")
         if app_ver:
             self.btn_info_app.title = f"  ℹ  LocalLens App v{app_ver}"
@@ -361,7 +376,7 @@ class LocalLensAgentApp(rumps.App):
                 lines = []
                 if mcp_u:
                     lines.append(
-                        f"LocalLens MCP Connector: v{mcp_u['latest_version']} available "
+                        f"LL Agent: v{mcp_u['latest_version']} available "
                         f"(you have {mcp_u['current_version']})."
                     )
                 if app_u:
@@ -424,9 +439,12 @@ class LocalLensAgentApp(rumps.App):
                 "free. You will not be charged.",
                 ok="Learn more",
                 cancel="Close",
+                other="Activate Pro…",
             )
             if res == 1:
                 open_url(get_pricing_url())
+            elif res == -1:
+                self.on_activate()
             return
 
         res = rumps.alert(
@@ -439,9 +457,24 @@ class LocalLensAgentApp(rumps.App):
             "Current plans and pricing are on the website.",
             ok="See Plans",
             cancel="Close",
+            other="Activate Pro…",
         )
         if res == 1:
             open_url(get_pricing_url())
+        elif res == -1:
+            self.on_activate()
+
+    def on_activate(self, sender=None):
+        """Open the Activate Pro window (a child process — see tray/activation.py)."""
+        def _closed(failed: bool):
+            global _cached_app_info
+            # Refresh now: the hourly poll would leave "Activate Pro…" showing
+            # after a successful activation.
+            _cached_app_info = get_current_app_info()
+            if failed:
+                _pending_alerts.append(("Activate Pro", ACTIVATE_FALLBACK_MESSAGE))
+
+        launch_activate_window(_closed)
 
     def on_update_details(self, sender):
         mcp_u = _cached_update_info.get("mcp")
@@ -509,7 +542,7 @@ class LocalLensAgentApp(rumps.App):
             f"{hl_text}\n\n"
         )
         body += (
-            "LocalLens Agent will download and install this update in the\n"
+            "LL Agent will download and install this update in the\n"
             "background, then restart automatically."
             if has_silent_download else
             "The download page will open in your browser.\n"
@@ -574,7 +607,7 @@ class LocalLensAgentApp(rumps.App):
                 else:
                     _pending_alerts.append((
                         "Update Installed  ✓",
-                        f"LocalLens MCP has been updated to v{latest}.",
+                        f"LL Agent has been updated to v{latest}.",
                     ))
             else:
                 _pending_alerts.append((
@@ -586,8 +619,8 @@ class LocalLensAgentApp(rumps.App):
             if result.get("success"):
                 _pending_alerts.append((
                     "Update Installed  ✓",
-                    f"LocalLens MCP has been updated to v{latest}.\n"
-                    "Restart LocalLens Agent for the changes to take effect.",
+                    f"LL Agent has been updated to v{latest}.\n"
+                    "Restart LL Agent for the changes to take effect.",
                 ))
             else:
                 _pending_alerts.append((

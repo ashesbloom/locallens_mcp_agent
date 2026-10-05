@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Mayank Pandey - LL Agent. See LICENSE.md.
 """
 Windows system-tray app for LocalLens Agent.
 
@@ -32,6 +34,7 @@ from .actions import (
     CLAUDE_CUSTOM_INSTRUCTIONS, CLAUDE_INSTRUCTIONS_HOWTO,
     STATUS_OFF, STATUS_STARTING, STATUS_ON, STATUS_EXTERNAL, STATUS_ALERT,
 )
+from .activation import ACTIVATE_FALLBACK_MESSAGE, launch_activate_window
 
 
 # ── Cached state (written by background threads, read by menu text fns) ──────
@@ -142,7 +145,7 @@ _UPDATE_CHECK_INTERVAL_SECONDS = 3600
 
 def _queue_update_notifications(update_info: dict):
     """Append a one-time alert for any update not already surfaced this session."""
-    labels = {"mcp": "LocalLens MCP Connector", "app": "LocalLens App"}
+    labels = {"mcp": "LL Agent", "app": "LocalLens App"}
     for key, label in labels.items():
         info = update_info.get(key)
         if not info or not info.get("update_available"):
@@ -321,6 +324,11 @@ def _info_mcp_title(_item=None):
 
 def _info_plan_title(_item=None):
     return f"  ℹ  Plan: {_cached_app_info.get('license_tier', 'Free')}"
+
+
+def _activate_title(_item=None):
+    # The item /thanks names (copy.thanks.activateApp); flips once licensed.
+    return "★  Pro — Active" if _cached_app_info.get("license_activated") else "Activate Pro…"
 
 
 def _info_app_title(_item=None):
@@ -535,7 +543,7 @@ def on_check_updates(icon, item):
             lines = []
             if mcp_u:
                 lines.append(
-                    f"LocalLens MCP Connector: v{mcp_u['latest_version']} available "
+                    f"LL Agent: v{mcp_u['latest_version']} available "
                     f"(you have {mcp_u['current_version']})."
                 )
             if app_u:
@@ -599,6 +607,7 @@ def on_plan(icon, item):
             "No licence needed, and nothing to buy yet.\n\n"
             "You are an early user: when paid plans launch, you keep Pro free. "
             "You will not be charged.\n\n"
+            "To enter a license key, choose Activate Pro… in this menu.\n\n"
             "Open the website to learn more?",
         ):
             open_url(get_pricing_url())
@@ -612,9 +621,27 @@ def on_plan(icon, item):
         "Pro adds - batch face enrolment, duplicate detection and cleanup, "
         "export reports, scheduled sweeps, active folders.\n\n"
         "Current plans and pricing are on the website.\n\n"
+        "To enter a license key, choose Activate Pro… in this menu.\n\n"
         "Open the plans and pricing page?",
     ):
         open_url(get_pricing_url())
+
+
+def on_activate(icon, item):
+    if _cached_app_info.get("license_activated"):
+        on_plan(icon, item)
+        return
+
+    def _closed(failed: bool):
+        global _cached_app_info
+        # Refresh now: the hourly poll would leave "Activate Pro…" showing.
+        _cached_app_info = get_current_app_info()
+        if _icon:
+            _icon.update_menu()
+        if failed:
+            _msg_box("Activate Pro", ACTIVATE_FALLBACK_MESSAGE)
+
+    launch_activate_window(_closed)
 
 
 def on_update_details(icon, item):
@@ -684,7 +711,7 @@ def _install_update_bg():
         f"{hl_text}\n\n"
     )
     msg += (
-        "LocalLens Agent will download and install this update in the\n"
+        "LL Agent will download and install this update in the\n"
         "background, then restart automatically.\n\n"
         "Proceed with the update?"
         if has_silent_download else
@@ -723,7 +750,7 @@ def _install_update_bg():
             if not result.get("restart_required"):
                 _msg_box(
                     "Update Installed  ✓",
-                    f"LocalLens MCP has been updated to v{latest}."
+                    f"LL Agent has been updated to v{latest}."
                 )
             # restart_required is False on Windows — the installer already
             # terminated this process and relaunched the new one.
@@ -738,8 +765,8 @@ def _install_update_bg():
         if result.get("success"):
             _msg_box(
                 "Update Installed  ✓",
-                f"LocalLens MCP has been updated to v{latest}.\n"
-                "Restart LocalLens Agent for the changes to take effect."
+                f"LL Agent has been updated to v{latest}.\n"
+                "Restart LL Agent for the changes to take effect."
             )
         else:
             _msg_box(
@@ -793,7 +820,7 @@ def run_win_tray():
     if ctypes.windll.kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
         _msg_box(
             "Already Running",
-            "LocalLens Agent is already running.\n\n"
+            "LL Agent is already running.\n\n"
             "Check the system tray (bottom-right, near the clock).",
             MB_OK | MB_ICONINFO,
         )
@@ -838,12 +865,14 @@ def run_win_tray():
         pystray.Menu.SEPARATOR,
         pystray.MenuItem(_updates_title, updates_submenu),
         pystray.Menu.SEPARATOR,
+        pystray.MenuItem(_activate_title, on_activate),
+        pystray.Menu.SEPARATOR,
         pystray.MenuItem("Help & Getting Started", on_help),
         pystray.Menu.SEPARATOR,
-        pystray.MenuItem("Quit LocalLens Agent", on_quit),
+        pystray.MenuItem("Quit LL Agent", on_quit),
     )
 
-    _icon = pystray.Icon("LocalLensAgent", image, "LocalLens Agent", menu)
+    _icon = pystray.Icon("LocalLensAgent", image, "LL Agent", menu)
 
     # Start the refresh/onboarding thread (reads _icon, so must start after it's set)
     threading.Thread(target=_refresh_loop, daemon=True).start()
