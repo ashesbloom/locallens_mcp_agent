@@ -39,10 +39,9 @@ def _text(path):
         return None
 
 
-# History is left as it was published; tests and the release-agent incident notes
-# name the banned strings in order to ban them.
+# History is left as it was published; tests name the banned strings in order to ban them.
 _HISTORY = re.compile(r"^(release_notes/release_notes_v[\d.]+\.md|version\.json|\.github/workflows/.*"
-                      r"|tests/.*|\.claude/skills/release-agent/RELEASE_MEMORY\.md)$")
+                      r"|tests/.*)$")
 
 
 def _scanned():
