@@ -171,8 +171,8 @@ def test_committed_changelog_matches_what_the_generator_produces():
 
 
 # ── set_version.js -> gen_changelog.py wiring ───────────────────────────────
-# scripts/set_version.js is documented in .agents/AGENTS.md as interchangeable
-# with set_version.py, so it has to regenerate CHANGELOG.md too or a release
+# scripts/set_version.js is interchangeable with set_version.py, so it has to
+# regenerate CHANGELOG.md too or a release
 # done through the JS path publishes a changelog stuck a version behind.
 # It shells out to the Python generator rather than reimplementing the
 # rendering — these assert the wiring is really there, by content, because the

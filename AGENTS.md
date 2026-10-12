@@ -40,5 +40,4 @@ production.
 
 ## Working in this repository
 
-Project conventions, commands and gotchas are in [CLAUDE.md](CLAUDE.md). The
-release-agent protocol is in [.agents/AGENTS.md](.agents/AGENTS.md).
+Project conventions, commands and gotchas are in [CLAUDE.md](CLAUDE.md).

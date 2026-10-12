@@ -32,9 +32,10 @@ local_api_token.txt
 *.swp
 *.swo
 
-# .claude/ is tracked on purpose — it carries the release agent, which has to
-# travel with the repo. Only the per-machine permission allowlist stays local.
-.claude/settings.local.json
+# AI-agent tooling (release agent, skills, per-machine settings). Not needed to
+# build or run the app, so it stays on the owner's machine.
+.claude/
+.agents/
 
 # macOS
 .DS_Store
