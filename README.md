@@ -10,10 +10,10 @@
 </p>
 
 <p align="center">
-  <a href="https://locallens-community.pages.dev/agent"><img src="assets/community-rail.svg" width="500" alt="LL Agent community site"></a>
+  <a href="https://locallens-community.pages.dev/"><img src="assets/community-rail.svg" width="500" alt="LocalLens community"></a>
   <br>
   <a href="https://locallens-community.pages.dev/post"><img src="assets/community-forum.svg" width="234" alt="Forum: report a bug or request a feature"></a>
-  <a href="https://locallens-community.pages.dev/agent"><img src="assets/community-updates.svg" width="234" alt="Updates: what shipped in LL Agent"></a>
+  <a href="CHANGELOG.md"><img src="assets/community-updates.svg" width="234" alt="Updates: what shipped in LL Agent"></a>
   <a href="https://locallens-community.pages.dev/contact"><img src="assets/community-contact.svg" width="234" alt="Contact: reach the maintainer directly"></a>
 </p>
 

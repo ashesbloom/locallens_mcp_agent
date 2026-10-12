@@ -21,7 +21,7 @@ Actions performed:
   3. Prepends to mcp.changelog in version.json (Application GUI Release Log)
   4. Generates release_notes_v<VERSION>.md (GitHub Release Page Release Notes)
   5. Regenerates CHANGELOG.md from version.json (Keep a Changelog, for the
-     community website) by running scripts/gen_changelog.py
+     README's Updates link) by running scripts/gen_changelog.py
   0. FIRST: rewrites LICENSE.md + NOTICE.md so this release is licensed as exactly
      this version with a Change Date four years from today. Aborts, having written
      nothing, if either file does not match the expected shape.
@@ -213,7 +213,7 @@ if (fs.existsSync(templatePath)) {
   console.warn(` ⚠️ release_notes_template.md not found at ${templatePath}`);
 }
 
-// 5. Regenerate CHANGELOG.md from version.json (community website)
+// 5. Regenerate CHANGELOG.md from version.json (README's Updates link)
 // Shelling out to the Python generator rather than reimplementing it here: a
 // second copy of the changelog rendering would be the same drift bug in a new
 // place. One generator, two callers. Lockstep with set_version.py's step 5.
@@ -231,7 +231,7 @@ try {
   execFileSync(python, [genChangelogPath], { cwd: rootDir, stdio: 'inherit' });
 } catch (e) {
   // Hard fail, never a warning: a release that silently skips the changelog
-  // publishes a community site stuck on the previous version.
+  // publishes a changelog stuck on the previous version.
   console.error(`\n ❌ Could not regenerate CHANGELOG.md: ${e.message}`);
   console.error(`    Everything else for v${version} was written, but CHANGELOG.md is now stale.`);
   console.error(`    Fix the generator, or run \`${python} scripts/gen_changelog.py\` by hand, before tagging.`);

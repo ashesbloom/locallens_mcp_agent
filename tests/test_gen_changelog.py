@@ -1,7 +1,7 @@
 """
 Tests for the CHANGELOG.md generator in scripts/gen_changelog.py.
 
-The community website reads CHANGELOG.md, but release history lives in
+The README's Updates button links to CHANGELOG.md, but release history lives in
 version.json under mcp.changelog. These pin the two things that can go wrong in
 between: a highlight landing in the wrong Keep a Changelog section, and a date
 gaining a day nobody wrote down.
@@ -173,7 +173,7 @@ def test_committed_changelog_matches_what_the_generator_produces():
 # ── set_version.js -> gen_changelog.py wiring ───────────────────────────────
 # scripts/set_version.js is documented in .agents/AGENTS.md as interchangeable
 # with set_version.py, so it has to regenerate CHANGELOG.md too or a release
-# done through the JS path publishes a community site stuck a version behind.
+# done through the JS path publishes a changelog stuck a version behind.
 # It shells out to the Python generator rather than reimplementing the
 # rendering — these assert the wiring is really there, by content, because the
 # repo has no JS test runner and adding one is not worth it.

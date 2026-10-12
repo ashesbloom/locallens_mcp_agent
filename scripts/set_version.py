@@ -15,7 +15,7 @@ Actions performed:
   3. Prepends to mcp.changelog in version.json (Application GUI Release Log)
   4. Generates release_notes/release_notes_v<VERSION>.md (GitHub Release Page Release Notes)
   5. Regenerates CHANGELOG.md from version.json (Keep a Changelog, for the
-     community website) via scripts/gen_changelog.py
+     README's Updates link) via scripts/gen_changelog.py
   0. FIRST, before anything else: rewrites LICENSE.md and NOTICE.md so this
      release is licensed as exactly this version with a Change Date four years
      from today (see bump_license below). Aborts, having written nothing, if
@@ -267,7 +267,7 @@ def main():
     else:
         print(f" ⚠️ release_notes_template.md not found at {template_path}")
 
-    # 5. Regenerate CHANGELOG.md from version.json (community website)
+    # 5. Regenerate CHANGELOG.md from version.json (README's Updates link)
     # Imported here, not at module scope: gen_changelog imports split_highlight
     # from this file, so a top-level import would be circular.
     from gen_changelog import main as gen_changelog_main

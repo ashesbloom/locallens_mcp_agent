@@ -7,7 +7,7 @@ LL Agent CHANGELOG.md Generator
 Usage: python scripts/gen_changelog.py
 
 Renders version.json's `mcp.changelog[]` as a Keep a Changelog formatted
-CHANGELOG.md at the repository root, for the community website to read.
+CHANGELOG.md at the repository root — the README's Updates button links to it.
 
 version.json stays the single source of release history — this file is a
 rendering of it, never an input. set_version.py calls this as its last step so
