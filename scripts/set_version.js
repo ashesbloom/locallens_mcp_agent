@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('node:child_process');
 
 // Usage: node set_version.js <version> [highlight1] [highlight2] ...
 const args = process.argv.slice(2);
@@ -19,6 +20,8 @@ Actions performed:
   2. Updates MCP_VERSION in src/mcp_server/updater.py
   3. Prepends to mcp.changelog in version.json (Application GUI Release Log)
   4. Generates release_notes_v<VERSION>.md (GitHub Release Page Release Notes)
+  5. Regenerates CHANGELOG.md from version.json (Keep a Changelog, for the
+     community website) by running scripts/gen_changelog.py
   0. FIRST: rewrites LICENSE.md + NOTICE.md so this release is licensed as exactly
      this version with a Change Date four years from today. Aborts, having written
      nothing, if either file does not match the expected shape.
@@ -208,6 +211,31 @@ if (fs.existsSync(templatePath)) {
   console.log(` ✅ Generated release_notes/${releaseNotesFileName} (GitHub Release Page Notes)`);
 } else {
   console.warn(` ⚠️ release_notes_template.md not found at ${templatePath}`);
+}
+
+// 5. Regenerate CHANGELOG.md from version.json (community website)
+// Shelling out to the Python generator rather than reimplementing it here: a
+// second copy of the changelog rendering would be the same drift bug in a new
+// place. One generator, two callers. Lockstep with set_version.py's step 5.
+const genChangelogPath = path.join(rootDir, 'scripts', 'gen_changelog.py');
+const venvPython = process.platform === 'win32'
+  ? path.join(rootDir, 'venv', 'Scripts', 'python.exe')
+  : path.join(rootDir, 'venv', 'bin', 'python');
+// Resolved from rootDir, not cwd, so this works run from any directory.
+const python = fs.existsSync(venvPython) ? venvPython : 'python3';
+
+try {
+  // stdio inherited so the generator's own per-entry date-source lines (git tag
+  // vs month fallback) and its ✅ still reach the operator — that audit trail is
+  // the whole point of printing them.
+  execFileSync(python, [genChangelogPath], { cwd: rootDir, stdio: 'inherit' });
+} catch (e) {
+  // Hard fail, never a warning: a release that silently skips the changelog
+  // publishes a community site stuck on the previous version.
+  console.error(`\n ❌ Could not regenerate CHANGELOG.md: ${e.message}`);
+  console.error(`    Everything else for v${version} was written, but CHANGELOG.md is now stale.`);
+  console.error(`    Fix the generator, or run \`${python} scripts/gen_changelog.py\` by hand, before tagging.`);
+  process.exit(1);
 }
 
 console.log(`\n───────────────────────────────────────────────────`);
