@@ -13,6 +13,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # Full history + tags: gen_changelog.py dates each release from its
+          # v<version> tag. A shallow clone has no tags, falls back to the 1st of
+          # the month, and fails test_committed_changelog_matches_what_the_generator_produces.
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
